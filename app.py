@@ -15,6 +15,7 @@ import gradio as gr
 import os
 from audiocraft.models import MusicGen
 from audiocraft.data.audio import audio_write
+import subprocess, random, string
 
 MODEL = None
 IS_SHARED_SPACE = "musicgen/MusicGen" in os.environ.get('SPACE_ID', '')
