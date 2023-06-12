@@ -136,9 +136,11 @@ def predict(model, text, melody, duration, topk, topp, temperature, cfg_coef, se
             file.name, output, MODEL.sample_rate, strategy="loudness",
             loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
         waveform_video = gr.make_waveform(file.name, bg_image=background, bg_color="#21b0fe" , bars_color=('#fe218b', '#fed700'), fg_alpha=1.0, bar_count=75)
-        # random_string = generate_random_string(12)
-        # random_string = f"{random_string}.mp4"
-        # resize_video(waveform_video, random_string, 900, 300)
+        if background is None or len(background_string) == 0:
+            random_string = generate_random_string(12)
+            random_string = f"{random_string}.mp4"
+            resize_video(waveform_video, random_string, 900, 300)
+            waveform_video = random_string
     global UNLOAD_MODEL
     if UNLOAD_MODEL:
         MODEL = None
@@ -172,7 +174,7 @@ def ui(**kwargs):
                     submit = gr.Button("Generate", variant="primary")
                     gr.Button("Interrupt").click(fn=interrupt, queue=False)
                 with gr.Row():
-                    background= gr.Image(value="./assets/background.png", source="upload", label="Background", shape=(768,512), type="filepath", interactive=True)
+                    background= gr.Image(source="upload", label="Background", type="filepath", interactive=True)
                 with gr.Row():
                     model = gr.Radio(["melody", "medium", "small", "large"], label="Model", value="melody", interactive=True)
                 with gr.Row():
