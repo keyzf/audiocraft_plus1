@@ -47,7 +47,7 @@ def load_model(version):
     return MusicGen.get_pretrained(version)
 
 
-def predict(model, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap=5, recondition=True, progress=gr.Progress()):
+def predict(model, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap=5, recondition=True, background="./assets/background.png", progress=gr.Progress()):
     global MODEL
     global INTERRUPTED
     INTERRUPTED = False
@@ -135,15 +135,15 @@ def predict(model, text, melody, duration, topk, topp, temperature, cfg_coef, se
         audio_write(
             file.name, output, MODEL.sample_rate, strategy="loudness",
             loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
-        waveform_video = gr.make_waveform(file.name, bg_color="#21b0fe" , bars_color=('#fe218b', '#fed700'), fg_alpha=1.0, bar_count=75)
-        random_string = generate_random_string(12)
-        random_string = f"{random_string}.mp4"
-        resize_video(waveform_video, random_string, 900, 300)
+        waveform_video = gr.make_waveform(file.name, bg_image=background, bg_color="#21b0fe" , bars_color=('#fe218b', '#fed700'), fg_alpha=1.0, bar_count=75)
+        # random_string = generate_random_string(12)
+        # random_string = f"{random_string}.mp4"
+        # resize_video(waveform_video, random_string, 900, 300)
     global UNLOAD_MODEL
     if UNLOAD_MODEL:
         MODEL = None
         torch.cuda.empty_cache()
-    return random_string, seed
+    return waveform_video, seed
 
 
 def ui(**kwargs):
@@ -172,6 +172,8 @@ def ui(**kwargs):
                     submit = gr.Button("Generate", variant="primary")
                     gr.Button("Interrupt").click(fn=interrupt, queue=False)
                 with gr.Row():
+                    background= gr.Image(value="./assets/background.png", source="upload", label="Background", shape=(768,512), type="filepath", interactive=True)
+                with gr.Row():
                     model = gr.Radio(["melody", "medium", "small", "large"], label="Model", value="melody", interactive=True)
                 with gr.Row():
                     duration = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
@@ -192,7 +194,7 @@ def ui(**kwargs):
                 seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
 
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
-        submit.click(predict, inputs=[model, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap, recondition], outputs=[output, seed_used])
+        submit.click(predict, inputs=[model, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap, recondition, background], outputs=[output, seed_used])
         def update_recondition(name: str):
             enabled = name == 'melody'
             return recondition.update(interactive=enabled, value=None if enabled else False)
