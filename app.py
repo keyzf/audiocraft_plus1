@@ -13,8 +13,10 @@ import time
 import torch
 import gradio as gr
 import os
+import numpy as np
 from audiocraft.models import MusicGen
 from audiocraft.data.audio import audio_write
+from audiocraft.data.audio_utils import convert_audio
 import subprocess, random, string
 
 MODEL = None
@@ -47,7 +49,7 @@ def load_model(version):
     return MusicGen.get_pretrained(version)
 
 
-def predict(model, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap=5, recondition=True, background="./assets/background.png", progress=gr.Progress()):
+def predict(model, text, melody, sample, duration, topk, topp, temperature, cfg_coef, seed, overlap=5, recondition=True, background="./assets/background.png", progress=gr.Progress()):
     global MODEL
     global INTERRUPTED
     INTERRUPTED = False
@@ -96,7 +98,39 @@ def predict(model, text, melody, duration, topk, topp, temperature, cfg_coef, se
                 progress((total_samples - duration * 50 - 3 + step, total_samples))
                 predict.last_progress_update = now
 
-        if melody:
+        if sample:
+            def normalize_audio(audio_data):
+                audio_data = audio_data.astype(np.float32)
+                max_value = np.max(np.abs(audio_data))
+                audio_data = audio_data / max_value
+                return audio_data
+            
+            globalSR, sampleM = sample[0], sample[1]
+            sampleM = normalize_audio(sampleM)
+            sampleM = torch.from_numpy(sampleM).t()
+
+            if sampleM.dim() > 1:
+                sampleM = convert_audio(sampleM, globalSR, 32000, 1)
+
+            sampleM = sampleM.to(MODEL.device).float().unsqueeze(0)
+            
+            if sampleM.dim() == 2:
+                sampleM = sampleM[None]
+
+            sample_length = sampleM.shape[sampleM.dim() - 1] / 32000
+            if output is None:
+                next_segment = sampleM
+                duration -= sample_length
+            else:
+                if first_chunk is None and MODEL.name == "melody" and recondition:
+                    first_chunk = output[:, :, 
+                    :MODEL.lm.cfg.dataset.segment_duration*MODEL.sample_rate]
+                last_chunk = output[:, :, -overlap*32000:]
+                next_segment = MODEL.generate_continuation(last_chunk,
+                    32000, descriptions=[text], progress=updateProgress,
+                    melody_wavs=(first_chunk), resample=False)
+                duration -= segment_duration - overlap
+        elif melody:
             sr, melody = melody[0], torch.from_numpy(melody[1]).to(MODEL.device).float().t().unsqueeze(0)
             print(melody.shape)
             if melody.dim() == 2:
@@ -170,6 +204,7 @@ def ui(**kwargs):
                 with gr.Row():
                     text = gr.Text(label="Input Text", interactive=True)
                     melody = gr.Audio(source="upload", type="numpy", label="Melody Condition (optional)", interactive=True)
+                    sample = gr.Audio(source="upload", type="numpy", label="Music Sample (optional)", interactive=True)
                 with gr.Row():
                     submit = gr.Button("Generate", variant="primary")
                     gr.Button("Interrupt").click(fn=interrupt, queue=False)
@@ -196,7 +231,7 @@ def ui(**kwargs):
                 seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
 
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
-        submit.click(predict, inputs=[model, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap, recondition, background], outputs=[output, seed_used])
+        submit.click(predict, inputs=[model, text, melody, sample, duration, topk, topp, temperature, cfg_coef, seed, overlap, recondition, background], outputs=[output, seed_used])
         def update_recondition(name: str):
             enabled = name == 'melody'
             return recondition.update(interactive=enabled, value=None if enabled else False)
