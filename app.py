@@ -183,12 +183,15 @@ def predict(model, text, melody, sample, duration, topk, topp, temperature, cfg_
 
 
 def ui(**kwargs):
-    with gr.Blocks() as interface:
+    with gr.Blocks(title='MusicGen+') as interface:
         gr.Markdown(
             """
-            # MusicGen
+            # MusicGen+ Stable Version
             This is your private demo for [MusicGen](https://github.com/facebookresearch/audiocraft), a simple and controllable model for music generation
             presented at: ["Simple and Controllable Music Generation"](https://arxiv.org/abs/2306.05284)
+            
+            This is an extended version of the original
+            Thanks to: Camenduru, rkfg, Oncorporation and GrandaddyShmax
             """
         )
         if IS_SHARED_SPACE:
