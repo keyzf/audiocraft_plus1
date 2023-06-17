@@ -169,7 +169,7 @@ def predict(model, text, melody, sample, duration, topk, topp, temperature, cfg_
         audio_write(
             file.name, output, MODEL.sample_rate, strategy="loudness",
             loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
-        waveform_video = gr.make_waveform(file.name, bg_image=background, bg_color="#21b0fe" , bars_color=('#fe218b', '#fed700'), fg_alpha=1.0, bar_count=75)
+        waveform_video = gr.make_waveform(file.name, bg_image=background, bg_color="#143F6B" , bars_color=('#FEB139', '#F55353'), fg_alpha=1.0, bar_count=75)
         if background is None or len(background) == 0:
             random_string = generate_random_string(12)
             random_string = f"{random_string}.mp4"
@@ -190,8 +190,10 @@ def ui(**kwargs):
             This is your private demo for [MusicGen](https://github.com/facebookresearch/audiocraft), a simple and controllable model for music generation
             presented at: ["Simple and Controllable Music Generation"](https://arxiv.org/abs/2306.05284)
             
-            This is an extended version of the original
+            This is an extended version of the original MusicGen.
             Thanks to: Camenduru, rkfg, Oncorporation and GrandaddyShmax
+            
+            Stable version currently has more features but uses an old music continuation method
             """
         )
         if IS_SHARED_SPACE:
