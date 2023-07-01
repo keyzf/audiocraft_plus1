@@ -7,7 +7,8 @@ Audiocraft is a PyTorch library for deep learning research on audio generation. 
 
 # MusicGen+
 
-![image](https://github.com/GrandaddyShmax/audiocraft_plus/assets/52707645/b481d322-1634-4353-95fe-d24230483c09)
+![image](https://github.com/GrandaddyShmax/audiocraft_plus/assets/52707645/de3553ce-ec3a-49d8-b7b5-b7ad1edcc209)
+
 
 MusicGen+ is an extension based on the original MusicGen
 
