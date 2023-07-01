@@ -31,10 +31,10 @@ from . import builders
 
 
 HF_MODEL_CHECKPOINTS_MAP = {
-    "small": "facebook/musicgen-small",
-    "medium": "facebook/musicgen-medium",
-    "large": "facebook/musicgen-large",
-    "melody": "facebook/musicgen-melody",
+    "small": "GrandaddyShmax/musicgen-small",
+    "medium": "GrandaddyShmax/musicgen-medium",
+    "large": "GrandaddyShmax/musicgen-large",
+    "melody": "GrandaddyShmax/musicgen-melody",
 }
 
 
