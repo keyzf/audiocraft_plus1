@@ -242,8 +242,8 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         outputs = MODEL.generate(texts, progress=progress)
 
     outputs = outputs.detach().cpu().float()
-    if channel != "mono" and sr_select != "32000":
-        outputs = convert_audio(outputs, target_sr, int(sr_select), (2 if channel == "stereo" else 1))
+    #if channel != "mono" and sr_select != "32000":
+        #outputs = convert_audio(outputs, target_sr, int(sr_select), (2 if channel == "stereo" else 1)
     out_files = []
     out_audios = []
     for output in outputs:
@@ -251,6 +251,17 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
             audio_write(
                 file.name, output, int(sr_select), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
+            
+            temp = AudioSegment.from_wav(file.name)
+            if sr_select != "32000":
+                temp = temp.set_frame_rate(int(sr_select))
+                temp.export(file.name, format="wav")
+            if channel == "stereo":
+                temp_left = temp.pan(-1.0)
+                temp_right = temp.pan(1.0)
+                temp_stereo = AudioSegment.from_mono_audiosegments(temp_left, temp_right)
+                temp_stereo.export(file.name, format="wav")
+            
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             file_cleaner.add(file.name)
