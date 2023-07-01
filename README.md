@@ -45,8 +45,9 @@ We offer a number of way to interact with MusicGen+:
 1. MusicGen+ is also available on the [`GrandaddyShmax/MusicGen_Plus`  HuggingFace Space](https://huggingface.co/spaces/GrandaddyShmax/MusicGen_Plus),
 2. You can run MusicGen+ on a Colab: [colab notebook](https://colab.research.google.com/github/camenduru/MusicGen-colab/blob/main/MusicGen_ClownOfMadness_plus_colab.ipynb).
 3. You can use the gradio MusicGen+ locally by running `python app.py`.
-4. Finally, checkout [@camenduru Colab page](https://github.com/camenduru/MusicGen-colab) which is regularly
+4. Checkout [@camenduru Colab page](https://github.com/camenduru/MusicGen-colab) which is regularly
   updated with contributions from @camenduru and the community.
+5. Finally, MusicGen is available in 🤗 Transformers from v4.31.0 onwards, see section [🤗 Transformers Usage](#-transformers-usage) below.
 
 ## API
 
@@ -88,6 +89,56 @@ for idx, one_wav in enumerate(wav):
     audio_write(f'{idx}', one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
 ```
 
+## 🤗 Transformers Usage
+
+MusicGen is available in the 🤗 Transformers library from version 4.31.0 onwards, requiring minimal dependencies 
+and additional packages. Steps to get started:
+
+1. First install the 🤗 [Transformers library](https://github.com/huggingface/transformers) from main:
+
+```
+pip install git+https://github.com/huggingface/transformers.git
+```
+
+2. Run the following Python code to generate text-conditional audio samples:
+
+```py
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
+
+processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+inputs = processor(
+    text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
+    padding=True,
+    return_tensors="pt",
+)
+
+audio_values = model.generate(**inputs, max_new_tokens=256)
+```
+
+3. Listen to the audio samples either in an ipynb notebook:
+
+```py
+from IPython.display import Audio
+
+sampling_rate = model.config.audio_encoder.sampling_rate
+Audio(audio_values[0].numpy(), rate=sampling_rate)
+```
+
+Or save them as a `.wav` file using a third-party library, e.g. `scipy`:
+
+```py
+import scipy
+
+sampling_rate = model.config.audio_encoder.sampling_rate
+scipy.io.wavfile.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0, 0].numpy())
+```
+
+For more details on using the MusicGen model for inference using the 🤗 Transformers library, refer to the 
+[MusicGen docs](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen) or the hands-on 
+[Google Colab](https://colab.research.google.com/github/sanchit-gandhi/notebooks/blob/main/MusicGen.ipynb).
 
 ## Model Card
 

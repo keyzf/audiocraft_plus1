@@ -23,6 +23,7 @@ from PIL import Image
 import torch
 import gradio as gr
 import numpy as np
+import typing as tp
 
 from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
@@ -86,6 +87,28 @@ def interrupt():
     global INTERRUPTING
     INTERRUPTING = True
 
+
+class FileCleaner:
+    def __init__(self, file_lifetime: float = 3600):
+        self.file_lifetime = file_lifetime
+        self.files = []
+
+    def add(self, path: tp.Union[str, Path]):
+        self._cleanup()
+        self.files.append((time.time(), Path(path)))
+
+    def _cleanup(self):
+        now = time.time()
+        for time_added, path in list(self.files):
+            if now - time_added > self.file_lifetime:
+                if path.exists():
+                    path.unlink()
+                self.files.pop(0)
+            else:
+                break
+
+
+file_cleaner = FileCleaner()
 
 def make_waveform(*args, **kwargs):
     # Further remove some warnings.
@@ -227,9 +250,13 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
+            file_cleaner.add(file.name)
     res = [out_file.result() for out_file in out_files]
     res_audio = out_audios
+    for file in res:
+        file_cleaner.add(file)
     print("batch finished", len(texts), time.time() - be)
+    print("Tempfiles currently stored: ", len(file_cleaner.files))
     if MOVE_TO_CPU:
         MODEL.to('cpu')
     if UNLOAD_MODEL:
@@ -319,7 +346,7 @@ def ui_full(launch_kwargs):
     with gr.Blocks(title='MusicGen+', theme=theme) as interface:
         gr.Markdown(
             """
-            # MusicGen+ V1.2.5
+            # MusicGen+ V1.2.5a
 
             Thanks to: facebookresearch, Camenduru, rkfg, oobabooga and GrandaddyShmax
             """
@@ -346,18 +373,6 @@ def ui_full(launch_kwargs):
                             prompts.append(text)
                             repeats.append(repeat)
                     with gr.Row():
-                        with gr.Column():
-                            input_type = gr.Radio(["file", "mic"], value="file", label="Input Type (optional)", interactive=True)
-                            mode = gr.Radio(["melody", "sample"], label="Input Audio Mode (optional)", value="sample", interactive=True)
-                            with gr.Row():
-                                trim_start = gr.Number(label="Trim Start", value=0, interactive=True)
-                                trim_end = gr.Number(label="Trim End", value=0, interactive=True)
-                        audio = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
-                    with gr.Row():
-                        submit = gr.Button("Generate", variant="primary")
-                        # Adapted from https://github.com/rkfg/audiocraft/blob/long/app.py, MIT license.
-                        _ = gr.Button("Interrupt").click(fn=interrupt, queue=False)
-                    with gr.Row():
                         duration = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
                     with gr.Row():
                         overlap = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
@@ -365,6 +380,15 @@ def ui_full(launch_kwargs):
                         seed = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
                         gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed], queue=False)
                         reuse_seed = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
+                with gr.Tab("Audio"):
+                    with gr.Row():
+                        with gr.Column():
+                            input_type = gr.Radio(["file", "mic"], value="file", label="Input Type (optional)", interactive=True)
+                            mode = gr.Radio(["melody", "sample"], label="Input Audio Mode (optional)", value="sample", interactive=True)
+                            with gr.Row():
+                                trim_start = gr.Number(label="Trim Start", value=0, interactive=True)
+                                trim_end = gr.Number(label="Trim End", value=0, interactive=True)
+                        audio = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
                 with gr.Tab("Customization"):
                     with gr.Row():
                         with gr.Column():
@@ -388,6 +412,10 @@ def ui_full(launch_kwargs):
                         topp = gr.Number(label="Top-p", value=0, interactive=True)
                         temperature = gr.Number(label="Temperature", value=1.0, interactive=True)
                         cfg_coef = gr.Number(label="Classifier Free Guidance", value=5.0, interactive=True)
+                with gr.Row():
+                    submit = gr.Button("Generate", variant="primary")
+                    # Adapted from https://github.com/rkfg/audiocraft/blob/long/app.py, MIT license.
+                    _ = gr.Button("Interrupt").click(fn=interrupt, queue=False)
             with gr.Column() as c:
                 with gr.Tab("Output"):
                     output = gr.Video(label="Generated Music", scale=0)
@@ -398,6 +426,14 @@ def ui_full(launch_kwargs):
                 with gr.Tab("Wiki"):
                     gr.Markdown(
                         """
+                        - **[Generate (button)]:**  
+                        Generates the music with the given settings and prompts.
+
+                        - **[Interrupt (button)]:**  
+                        Stops the music generation as soon as it can, providing an incomplete output.
+
+                        ---
+
                         ### Generation Tab:
 
                         #### Multi-Prompt: 
@@ -415,27 +451,6 @@ def ui_full(launch_kwargs):
 
                         - **[Repeat (number)]:**  
                         Write how many times this prompt will repeat (instead of wasting another prompt segment on the same prompt).
-
-                        - **[Input Type (selection)]:**  
-                        `File` mode allows you to upload an audio file to use as input  
-                        `Mic` mode allows you to use your microphone as input
-
-                        - **[Input Audio Mode (selection)]:**  
-                        `Melody` mode only works with the melody model: it conditions the music generation to reference the melody  
-                        `Sample` mode works with any model: it gives a music sample to the model to generate its continuation.
-
-                        - **[Trim Start and Trim End (numbers)]:**  
-                        `Trim Start` set how much you'd like to trim the input audio from the start  
-                        `Trim End` same as the above but from the end
-
-                        - **[Input Audio (audio file)]:**  
-                        Input here the audio you wish to use with "melody" or "sample" mode.
-
-                        - **[Generate (button)]:**  
-                        Generates the music with the given settings and prompts.
-
-                        - **[Interrupt (button)]:**  
-                        Stops the music generation as soon as it can, providing an incomplete output.
 
                         - **[Duration (number)]:**  
                         How long you want the generated music to be (in seconds).
@@ -455,6 +470,25 @@ def ui_full(launch_kwargs):
 
                         - **[Copy Previous Seed (button)]:**  
                         Copies the seed from the output seed (if you don't feel like doing it manualy).
+
+                        ---
+
+                        ### Audio Tab:
+
+                        - **[Input Type (selection)]:**  
+                        `File` mode allows you to upload an audio file to use as input  
+                        `Mic` mode allows you to use your microphone as input
+
+                        - **[Input Audio Mode (selection)]:**  
+                        `Melody` mode only works with the melody model: it conditions the music generation to reference the melody  
+                        `Sample` mode works with any model: it gives a music sample to the model to generate its continuation.
+
+                        - **[Trim Start and Trim End (numbers)]:**  
+                        `Trim Start` set how much you'd like to trim the input audio from the start  
+                        `Trim End` same as the above but from the end
+
+                        - **[Input Audio (audio file)]:**  
+                        Input here the audio you wish to use with "melody" or "sample" mode.
 
                         ---
 
@@ -515,6 +549,14 @@ def ui_full(launch_kwargs):
                     gr.Markdown(
                         """
                         ## Changelog:
+
+                        ### V1.2.5a
+
+                        - Added file cleaner (This comes from the main facebookresearch repo)
+
+                        - Reorganized a little, moved audio to a seperate tab
+
+
 
                         ### V1.2.5
 
