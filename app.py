@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 from PIL import Image
 from pydub import AudioSegment
+from pydub.effects import normalize
 
 import torch
 import gradio as gr
@@ -256,12 +257,14 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
                     temp = temp.set_frame_rate(int(sr_select))
                 if channel == "stereo":
                     temp_left = temp.pan(-1.0)
-                    temp_left = temp_left + 5
                     temp_left = temp_left.set_channels(1)
                     temp_right = temp.pan(1.0)
-                    temp_right = temp_right + 5
                     temp_right = temp_right.set_channels(1)
                     temp = AudioSegment.from_mono_audiosegments(temp_left, temp_right)
+                elif channel == "stereo effect":
+                    left = temp.pan(-0.5) - 3
+                    right = temp.pan(0.6) - 3
+                    temp = left.overlay(right, position=5)
                 temp.export(file.name, format="wav")
             
             out_audios.append(file.name)
@@ -418,7 +421,7 @@ def ui_full(launch_kwargs):
                                 width = gr.Number(label="Width", value=768, interactive=True)
                 with gr.Tab("Settings"):
                     with gr.Row():
-                        channel = gr.Radio(["mono", "stereo"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
+                        channel = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo effect", interactive=True, scale=1)
                         sr_select = gr.Dropdown(["11025", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                     with gr.Row():
                         model = gr.Radio(["melody", "small", "medium", "large", "custom"], label="Model", value="large", interactive=True, scale=1)
@@ -533,8 +536,11 @@ def ui_full(launch_kwargs):
 
                         ### Settings Tab:
 
-                        - **[Output Audio CHannels (selection)]:**  
-                        With this you can select the amount of channels that you wish for your output audio.
+                        - **[Output Audio Channels (selection)]:**  
+                        With this you can select the amount of channels that you wish for your output audio.  
+                        `mono` is a straightforward single channel audio  
+                        `stereo` is a dual channel audio but it will sound more or less like mono  
+                        `stereo effect` this one is also dual channel but uses tricks to simulate a stereo audio.
 
                         - **[Output Audio Sample Rate (dropdown)]:**  
                         The output audio sample rate, the model default is 32000.
