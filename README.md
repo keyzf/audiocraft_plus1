@@ -5,7 +5,7 @@
 
 Audiocraft is a PyTorch library for deep learning research on audio generation. At the moment, it contains the code for MusicGen, a state-of-the-art controllable text-to-music model.
 
-# MusicGen+
+# MusicGen+ - An All-in-one Webui for MusicGen
 
 ![image](https://github.com/GrandaddyShmax/audiocraft_plus/assets/52707645/de3553ce-ec3a-49d8-b7b5-b7ad1edcc209)
 
@@ -37,7 +37,7 @@ Audiocraft requires Python 3.9, PyTorch 2.0.0, and a GPU with at least 16 GB of 
 pip install 'torch>=2.0'
 # Then proceed to one of the following
 pip install -U audiocraft  # stable release
-pip install -U git+https://git@github.com/GrandaddyShmax/audiocraft_plus
+pip install -U git+https://git@github.com/GrandaddyShmax/audiocraft_plus#egg=audiocraft
 pip install -e .  # or if you cloned the repo locally
 ```
 
