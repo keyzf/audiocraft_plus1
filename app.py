@@ -19,6 +19,8 @@ import glob
 import re
 from pathlib import Path
 from PIL import Image
+from pydub import AudioSegment
+from pydub.effects import normalize
 
 import torch
 import gradio as gr
@@ -165,7 +167,7 @@ def normalize_audio(audio_data):
     audio_data /= max_value
     return audio_data
 
-def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, progress=False, **gen_kwargs):
+def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     maximum_size = 29.5
     cut_size = 0
     sampleP = None
@@ -241,13 +243,27 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         outputs = MODEL.generate(texts, progress=progress)
 
     outputs = outputs.detach().cpu().float()
+    if channel == "stereo":
+        outputs = convert_audio(outputs, target_sr, int(sr_select), 2)
+    elif channel == "mono" and sr_select != "32000":
+        outputs = convert_audio(outputs, target_sr, int(sr_select), 1)
     out_files = []
     out_audios = []
     for output in outputs:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
             audio_write(
-                file.name, output, MODEL.sample_rate, strategy="loudness",
+                file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
+            
+            if channel == "stereo effect":
+                temp = AudioSegment.from_wav(file.name)
+                if sr_select != "32000":
+                    temp = temp.set_frame_rate(int(sr_select))
+                left = temp.pan(-0.5) - 5
+                right = temp.pan(0.6) - 5
+                temp = left.overlay(right, position=5)
+                temp.export(file.name, format="wav")
+            
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             file_cleaner.add(file.name)
@@ -274,7 +290,7 @@ def predict_batched(texts, melodies):
     return [res]
 
 
-def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, progress=gr.Progress()):
+def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
     INTERRUPTING = False
     if temperature < 0:
@@ -327,7 +343,7 @@ def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3,
         ind = ind + 1
 
     outs, outs_audio = _do_predictions(
-        [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, progress=True,
+        [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
     return outs[0], outs_audio[0], seed
 
@@ -346,7 +362,9 @@ def ui_full(launch_kwargs):
     with gr.Blocks(title='MusicGen+', theme=theme) as interface:
         gr.Markdown(
             """
-            # MusicGen+ V1.2.5a
+            # MusicGen+ V1.2.6
+
+            ## An All-in-One MusicGen WebUI
 
             Thanks to: facebookresearch, Camenduru, rkfg, oobabooga and GrandaddyShmax
             """
@@ -402,7 +420,10 @@ def ui_full(launch_kwargs):
                                 width = gr.Number(label="Width", value=768, interactive=True)
                 with gr.Tab("Settings"):
                     with gr.Row():
-                        model = gr.Radio(["melody", "small", "medium", "large", "custom"], label="Model", value="melody", interactive=True, scale=1)
+                        channel = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
+                        sr_select = gr.Dropdown(["11025", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
+                    with gr.Row():
+                        model = gr.Radio(["melody", "small", "medium", "large", "custom"], label="Model", value="large", interactive=True, scale=1)
                         with gr.Column():
                             dropdown = gr.Dropdown(choices=get_available_models(), value=("No models found" if len(get_available_models()) < 1 else get_available_models()[0]), label='Custom Model (models folder)', elem_classes='slim-dropdown', interactive=True)
                             ui.create_refresh_button(dropdown, lambda: None, lambda: {'choices': get_available_models()}, 'refresh-button')
@@ -514,6 +535,15 @@ def ui_full(launch_kwargs):
 
                         ### Settings Tab:
 
+                        - **[Output Audio Channels (selection)]:**  
+                        With this you can select the amount of channels that you wish for your output audio.  
+                        `mono` is a straightforward single channel audio  
+                        `stereo` is a dual channel audio but it will sound more or less like mono  
+                        `stereo effect` this one is also dual channel but uses tricks to simulate a stereo audio.
+
+                        - **[Output Audio Sample Rate (dropdown)]:**  
+                        The output audio sample rate, the model default is 32000.
+
                         - **[Model (selection)]:**  
                         Here you can choose which model you wish to use:  
                         `melody` model is based on the medium model with a unique feature that lets you use melody conditioning  
@@ -549,6 +579,14 @@ def ui_full(launch_kwargs):
                     gr.Markdown(
                         """
                         ## Changelog:
+
+                        ### V1.2.6
+
+                        - Added option to generate in stereo (instead of only mono)
+
+                        - Added dropdown for selecting output sample rate (model default is 32000)
+
+
 
                         ### V1.2.5a
 
@@ -660,7 +698,7 @@ def ui_full(launch_kwargs):
                     )
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         send_audio.click(fn=lambda x: x, inputs=[audio_only], outputs=[audio], queue=False)
-        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2], outputs=[output, audio_only, seed_used])
+        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
 
         def variable_outputs(k):
