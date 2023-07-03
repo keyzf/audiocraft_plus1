@@ -243,28 +243,25 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         outputs = MODEL.generate(texts, progress=progress)
 
     outputs = outputs.detach().cpu().float()
+    if channel == "stereo":
+        outputs = convert_audio(outputs, target_sr, int(sr_select), 2)
+    elif channel == "mono" and sr_select != "32000":
+        outputs = convert_audio(outputs, target_sr, int(sr_select), 1)
     out_files = []
     out_audios = []
     for output in outputs:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
             audio_write(
-                file.name, output, MODEL.sample_rate, strategy="loudness",
+                file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
             
-            if sr_select != "32000" and channel != "mono":
+            if channel == "stereo effect":
                 temp = AudioSegment.from_wav(file.name)
                 if sr_select != "32000":
                     temp = temp.set_frame_rate(int(sr_select))
-                if channel == "stereo":
-                    temp_left = temp.pan(-1.0) - 3
-                    temp_left = temp_left.set_channels(1)
-                    temp_right = temp.pan(1.0) - 3
-                    temp_right = temp_right.set_channels(1)
-                    temp = AudioSegment.from_mono_audiosegments(temp_left, temp_right)
-                elif channel == "stereo effect":
-                    left = temp.pan(-0.5) - 3
-                    right = temp.pan(0.6) - 3
-                    temp = left.overlay(right, position=5)
+                left = temp.pan(-0.5) - 5
+                right = temp.pan(0.6) - 5
+                temp = left.overlay(right, position=5)
                 temp.export(file.name, format="wav")
             
             out_audios.append(file.name)
