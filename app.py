@@ -167,7 +167,7 @@ def normalize_audio(audio_data):
     audio_data /= max_value
     return audio_data
 
-def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
+def _do_predictions(texts, melodies, sample, tags, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     maximum_size = 29.5
     cut_size = 0
     sampleP = None
@@ -243,32 +243,48 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         outputs = MODEL.generate(texts, progress=progress)
 
     outputs = outputs.detach().cpu().float()
+    backups = outputs
     if channel == "stereo":
         outputs = convert_audio(outputs, target_sr, int(sr_select), 2)
     elif channel == "mono" and sr_select != "32000":
         outputs = convert_audio(outputs, target_sr, int(sr_select), 1)
     out_files = []
     out_audios = []
+    out_backup = []
     for output in outputs:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
             audio_write(
                 file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
-            
+            temp = AudioSegment.from_wav(file.name)
             if channel == "stereo effect":
-                temp = AudioSegment.from_wav(file.name)
                 if sr_select != "32000":
                     temp = temp.set_frame_rate(int(sr_select))
                 left = temp.pan(-0.5) - 5
                 right = temp.pan(0.6) - 5
                 temp = left.overlay(right, position=5)
-                temp.export(file.name, format="wav")
+            mode = ''
+            if sample is not None:
+                mode = 'sample'
+            elif melodies[0] is not None:
+                mode = 'melody'
+            else:
+                mode = 'none'
+            temp.export(file.name, format="wav", tags={'prompt': ''.join(texts), 'duration': str(duration), 'seed': tags[0], 'model': MODEL.name, 'overlap': tags[1], 'trim_start': str(trim_start), 'trim_end': str(trim_end), 'topk': tags[2], 'topp': tags[3], 'temperature': tags[4], 'cfg_coef': tags[5], 'channel': channel, 'sr_select': sr_select, 'mode': mode})
             
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             file_cleaner.add(file.name)
+    for backup in backups:
+        with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
+            audio_write(
+                file.name, backup, MODEL.sample_rate, strategy="loudness",
+                loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
+            out_backup.append(file.name)
+            file_cleaner.add(file.name)
     res = [out_file.result() for out_file in out_files]
     res_audio = out_audios
+    res_backup = out_backup
     for file in res:
         file_cleaner.add(file)
     print("batch finished", len(texts), time.time() - be)
@@ -279,7 +295,7 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         MODEL = None
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
-    return res, res_audio
+    return res, res_audio, res_backup
 
 
 def predict_batched(texts, melodies):
@@ -331,6 +347,8 @@ def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3,
     elif mode == "melody":
         melody = audio
     
+    tags = [str(seed), str(overlap), str(topk), str(topp), str(temperature), str(cfg_coef)]
+
     text_cat = [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9]
     drag_cat = [d0, d1, d2, d3, d4, d5, d6, d7, d8, d9]
     texts = []
@@ -342,10 +360,11 @@ def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3,
         ind2 = 0
         ind = ind + 1
 
-    outs, outs_audio = _do_predictions(
-        [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
+    outs, outs_audio, outs_backup = _do_predictions(
+        [texts], [melody], sample, tags, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
-    return outs[0], outs_audio[0], seed
+    
+    return outs[0], outs_audio[0], outs_backup[0], seed
 
 max_textboxes = 10
 
@@ -362,7 +381,7 @@ def ui_full(launch_kwargs):
     with gr.Blocks(title='MusicGen+', theme=theme) as interface:
         gr.Markdown(
             """
-            # MusicGen+ V1.2.6
+            # MusicGen+ V1.2.7
 
             ## An All-in-One MusicGen WebUI
 
@@ -442,6 +461,7 @@ def ui_full(launch_kwargs):
                     output = gr.Video(label="Generated Music", scale=0)
                     with gr.Row():
                         audio_only = gr.Audio(type="numpy", label="Audio Only", interactive=False)
+                        backup_only = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=True)
                         send_audio = gr.Button("Send to Input Audio")
                     seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
                 with gr.Tab("Wiki"):
@@ -580,6 +600,12 @@ def ui_full(launch_kwargs):
                         """
                         ## Changelog:
 
+                        ### V1.2.7
+
+                        - When sending generated audio to Input Audio, it will send a backup audio with default settings (best for continuos generation)
+
+
+
                         ### V1.2.6
 
                         - Added option to generate in stereo (instead of only mono)
@@ -697,8 +723,8 @@ def ui_full(launch_kwargs):
                         """
                     )
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
-        send_audio.click(fn=lambda x: x, inputs=[audio_only], outputs=[audio], queue=False)
-        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, seed_used])
+        send_audio.click(fn=lambda x: x, inputs=[backup_only], outputs=[audio], queue=False)
+        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
 
         def variable_outputs(k):
