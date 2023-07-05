@@ -270,8 +270,9 @@ def _do_predictions(texts, melodies, sample, tags, trim_start, trim_end, duratio
                 mode = 'melody'
             else:
                 mode = 'none'
-            temp.export(file.name, format="wav", tags={'prompt': ''.join(texts), 'duration': str(duration), 'seed': tags[0], 'model': MODEL.name, 'overlap': tags[1], 'trim_start': str(trim_start), 'trim_end': str(trim_end), 'topk': tags[2], 'topp': tags[3], 'temperature': tags[4], 'cfg_coef': tags[5], 'channel': channel, 'sr_select': sr_select, 'mode': mode})
-            
+            #temp.export(file.name, format="wav", tags={'prompt': ''.join(texts), 'duration': str(duration), 'seed': tags[0], 'model': MODEL.name, 'overlap': tags[1], 'trim_start': str(trim_start), 'trim_end': str(trim_end), 'topk': tags[2], 'topp': tags[3], 'temperature': tags[4], 'cfg_coef': tags[5], 'channel': channel, 'sr_select': sr_select, 'mode': mode})
+            temp.export(file.name, format="wav")
+
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             file_cleaner.add(file.name)
@@ -461,7 +462,7 @@ def ui_full(launch_kwargs):
                     output = gr.Video(label="Generated Music", scale=0)
                     with gr.Row():
                         audio_only = gr.Audio(type="numpy", label="Audio Only", interactive=False)
-                        backup_only = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=True)
+                        backup_only = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=False)
                         send_audio = gr.Button("Send to Input Audio")
                     seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
                 with gr.Tab("Wiki"):
