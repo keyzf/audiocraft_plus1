@@ -17,13 +17,14 @@ import time
 import warnings
 import glob
 import re
-from pydub.utils import mediainfo
 from pathlib import Path
 from PIL import Image
 from pydub import AudioSegment
 from pydub.effects import normalize
+from datetime import datetime
 
-import mutagen
+import json
+import shutil
 import taglib
 import torch
 import gradio as gr
@@ -165,11 +166,27 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
         MODEL = result
 
 def get_audio_info(audio_path):
-    print(audio_path.name)
-    #audio = mutagen.File(audio_path)
-    #print(audio)
-    with taglib.File(audio_path.name, save_on_exit=False) as song:
-        return song.tags
+    if audio_path is not None:
+        with taglib.File(audio_path.name, save_on_exit=False) as song:
+            json_string = song.tags['COMMENT'][0]
+            data = json.loads(json_string)
+            prompts = str("Prompts: " + data['texts'])
+            duration = str("Duration: " + data['duration'])
+            overlap = str("Overlap: " + data['overlap'])
+            seed = str("Seed: " + data['seed'])
+            audio_mode = str("Audio Mode: " + data['audio_mode'])
+            input_length = str("Input Length: " + data['input_length'])
+            channel = str("Channel: " + data['channel'])
+            sr_select = str("Sample Rate: " + data['sr_select'])
+            model = str("Model: " + data['model'])
+            topk = str("Topk: " + data['topk'])
+            topp = str("Topp: " + data['topp'])
+            temperature = str("Temperature: " + data['temperature'])
+            cfg_coef = str("Classifier Free Guidance: " + data['cfg_coef'])
+            info = str(prompts + "\n" + duration + "\n" + overlap + "\n" + seed + "\n" + audio_mode + "\n" + input_length + "\n" + channel + "\n" + sr_select + "\n" + model + "\n" + topk + "\n" + topp + "\n" + temperature + "\n" + cfg_coef)
+            return info
+    else:
+        return None
 
 def normalize_audio(audio_data):
     audio_data = audio_data.astype(np.float32)
@@ -177,18 +194,10 @@ def normalize_audio(audio_data):
     audio_data /= max_value
     return audio_data
 
-def print_tag(file_path):
-    metadata = mediainfo(file_path).get('TAG',None)
-    print(metadata)
-
-def print_wav_tags(file_path):
-    metadata = mediainfo(file_path)
-    for tag, value in metadata.items():
-        print(f"{tag}: {value}")
-
-def _do_predictions(texts, melodies, sample, tags, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
+def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     maximum_size = 29.5
     cut_size = 0
+    input_length = 0
     sampleP = None
     if sample is not None:
         globalSR, sampleM = sample[0], sample[1]
@@ -213,6 +222,7 @@ def _do_predictions(texts, melodies, sample, tags, trim_start, trim_end, duratio
             sampleM = sampleM[..., int(globalSR * cut_size):]
         if sample_length >= duration:
             duration = sample_length + 0.5
+        input_length = sample_length
     global MODEL
     MODEL.set_generation_params(duration=(duration - cut_size), **gen_kwargs)
     print("new batch", len(texts), texts, [None if m is None else (m[0], m[1].shape) for m in melodies], [None if sample is None else (sample[0], sample[1].shape)])
@@ -282,19 +292,7 @@ def _do_predictions(texts, melodies, sample, tags, trim_start, trim_end, duratio
                 left = temp.pan(-0.5) - 5
                 right = temp.pan(0.6) - 5
                 temp = left.overlay(right, position=5)
-            mode = ''
-            if sample is not None:
-                mode = 'sample'
-            elif melodies[0] is not None:
-                mode = 'melody'
-            else:
-                mode = 'none'
-            #temp.export(file.name, format="wav", tags={'prompt': ''.join(texts), 'duration': str(duration), 'seed': tags[0], 'model': MODEL.name, 'overlap': tags[1], 'trim_start': str(trim_start), 'trim_end': str(trim_end), 'topk': tags[2], 'topp': tags[3], 'temperature': tags[4], 'cfg_coef': tags[5], 'channel': channel, 'sr_select': sr_select, 'mode': mode})
-            #temp.export(file.name, format="mp3", tags={'duration_test': str(duration)})
             temp.export(file.name, format="wav")
-
-            print(mediainfo(file.name).get('TAG', None))
-            print_tag(file.name)
 
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
@@ -319,7 +317,7 @@ def _do_predictions(texts, melodies, sample, tags, trim_start, trim_end, duratio
         MODEL = None
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
-    return res, res_audio, res_backup
+    return res, res_audio, res_backup, input_length
 
 
 def predict_batched(texts, melodies):
@@ -330,9 +328,109 @@ def predict_batched(texts, melodies):
     return [res]
 
 
+def add_tags(filename, tags): 
+    json_string = None
+
+    data = {
+        "texts": tags[0],
+        "duration": tags[1],
+        "overlap": tags[2],
+        "seed": tags[3],
+        "audio_mode": tags[4],
+        "input_length": tags[5],
+        "channel": tags[6],
+        "sr_select": tags[7],
+        "model": tags[8],
+        "topk": tags[9],  
+        "topp": tags[10],
+        "temperature": tags[11],
+        "cfg_coef": tags[12]
+        }
+
+    json_string = json.dumps(data)
+    print(json_string)
+
+    if os.path.exists(filename):
+        with taglib.File(filename, save_on_exit=True) as song:
+            song.tags = {'COMMENT': json_string }
+    return;
+
+
+def save_outputs(mp4, wav_tmp, tags):
+    # mp4: .mp4 file name in root running folder of app.py    
+    # wav_tmp: temporary wav file located in %TEMP% folder
+    # seed - used seed 
+    # exanple BgnJtr4Pn1AJ.mp4,  C:\Users\Alex\AppData\Local\Temp\tmp4ermrebs.wav,  195123182343465
+    # procedure read generated .mp4 and wav files, rename it by using seed as name, 
+    # and will store it to ./output/today_date/wav and  ./output/today_date/mp4 folders. 
+    # if file with same seed number already exist its make postfix in name like seed(n) 
+    # where is n - consiqunce number 1-2-3-4 and so on
+    # then we store generated mp4 and wav into destination folders.     
+
+    current_date = datetime.now().strftime("%Y%m%d")
+    wav_directory = os.path.join(os.getcwd(), 'output', current_date,'wav')
+    mp4_directory = os.path.join(os.getcwd(), 'output', current_date,'mp4')
+    os.makedirs(wav_directory, exist_ok=True)
+    os.makedirs(mp4_directory, exist_ok=True)
+
+    filename = str(tags[3]) + '.wav'
+    target = os.path.join(wav_directory, filename)
+    counter = 1
+    while os.path.exists(target):
+        filename = str(tags[3]) + f'({counter})' + '.wav'
+        target = os.path.join(wav_directory, filename)
+        counter += 1
+
+    shutil.copyfile(wav_tmp, target); # make copy of original file
+    add_tags(target, tags);
+    
+    wav_target=target;
+    target=target.replace('wav', 'mp4');    
+    mp4_target=target;
+    
+    mp4=r'./' +mp4;    
+    shutil.copyfile(mp4, target); # make copy of original file  
+    add_tags(target, tags);
+    return wav_target, mp4_target;
+
+
+def clear_cash():
+    # delete all temporary files genegated my system
+    current_date = datetime.now().date()
+    current_directory = os.getcwd()
+    files = glob.glob(os.path.join(current_directory, '*.mp4'))
+    for file in files:
+        creation_date = datetime.fromtimestamp(os.path.getctime(file)).date()
+        if creation_date == current_date:
+            os.remove(file)
+
+    temp_directory = os.environ.get('TEMP')
+    files = glob.glob(os.path.join(temp_directory, 'tmp*.mp4'))
+    for file in files:
+        creation_date = datetime.fromtimestamp(os.path.getctime(file)).date()
+        if creation_date == current_date:
+            os.remove(file)
+   
+    files = glob.glob(os.path.join(temp_directory, 'tmp*.wav'))
+    for file in files:
+        creation_date = datetime.fromtimestamp(os.path.getctime(file)).date()
+        if creation_date == current_date:
+            os.remove(file)
+
+    files = glob.glob(os.path.join(temp_directory, 'tmp*.png'))
+    for file in files:
+        creation_date = datetime.fromtimestamp(os.path.getctime(file)).date()
+        if creation_date == current_date:
+            os.remove(file)
+    return
+
+
 def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
     INTERRUPTING = False
+    
+    #clear_cash();
+    
     if temperature < 0:
         raise gr.Error("Temperature must be >= 0.")
     if topk < 0:
@@ -364,15 +462,16 @@ def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3,
             raise gr.Error("Interrupted.")
     MODEL.set_custom_progress_callback(_progress)
 
+    audio_mode = "none"
     melody = None
     sample = None
-    if mode == "sample":
-        sample = audio
-    elif mode == "melody":
-        melody = audio
+    if audio:
+      audio_mode = mode
+      if mode == "sample":
+          sample = audio
+      elif mode == "melody":
+          melody = audio
     
-    tags = [str(seed), str(overlap), str(topk), str(topp), str(temperature), str(cfg_coef)]
-
     text_cat = [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9]
     drag_cat = [d0, d1, d2, d3, d4, d5, d6, d7, d8, d9]
     texts = []
@@ -384,35 +483,13 @@ def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3,
         ind2 = 0
         ind = ind + 1
 
-    outs, outs_audio, outs_backup = _do_predictions(
-        [texts], [melody], sample, tags, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
+    outs, outs_audio, outs_backup, input_length = _do_predictions(
+        [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
-    
-    #audio = AudioSegment.from_file(outs[0])
-    #audio.export(outs[0], format="mp4", tags={'prompt': ''.join(texts), 'duration': str(duration), 'seed': tags[0], 'model': MODEL.name, 'overlap': tags[1], 'trim_start': str(trim_start), 'trim_end': str(trim_end), 'topk': tags[2], 'topp': tags[3], 'temperature': tags[4], 'cfg_coef': tags[5], 'channel': channel, 'sr_select': sr_select, 'mode': mode})
+    tags = [str(texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(topk), str(topp), str(temperature), str(cfg_coef)]
+    wav_target, mp4_target = save_outputs(outs[0], outs_audio[0], tags);
 
-    with taglib.File(outs[0], save_on_exit=True) as song:
-        print(song.tags)
-        song.tags['prompt'] = ''.join(texts)
-        song.tags['duration'] = str(duration)
-        song.tags['seed'] = tags[0]
-        song.tags['model'] = MODEL.name
-        song.tags['overlap'] = tags[1]
-        song.tags['trim_start'] = str(trim_start)
-        song.tags['trim_end'] = str(trim_end)
-        song.tags['topk'] = tags[2]
-        song.tags['topp'] = tags[3]
-        song.tags['temperature'] = tags[4]
-        song.tags['cfg_coef'] = tags[5]
-        song.tags['channel'] = channel
-        song.tags['sr_select'] = sr_select
-        song.tags['mode'] = mode
-        print(song.tags)
-        song.save()
-
-    print(mediainfo(outs[0]).get('TAG', None))
-    print_wav_tags(outs[0])
-    return outs[0], outs_audio[0], outs_backup[0], seed
+    return mp4_target, wav_target, outs_backup[0], seed
 
 max_textboxes = 10
 
@@ -433,10 +510,10 @@ def ui_full(launch_kwargs):
 
             ## An All-in-One MusicGen WebUI
 
-            Thanks to: facebookresearch, Camenduru, rkfg, oobabooga and GrandaddyShmax
+            Thanks to: facebookresearch, Camenduru, rkfg, oobabooga, AlexHK and GrandaddyShmax
             """
         )
-        with gr.Tab("Txt2Audio"):
+        with gr.Tab("Text2Audio"):
             with gr.Row():
                 with gr.Column():
                     with gr.Tab("Generation"):
@@ -769,6 +846,8 @@ def ui_full(launch_kwargs):
                             #### rkfg - https://github.com/rkfg
 
                             #### oobabooga - https://github.com/oobabooga
+                            
+                            #### AlexHK - https://github.com/alanhk147
                             """
                         )
         with gr.Tab("Audio Info"):
@@ -776,7 +855,7 @@ def ui_full(launch_kwargs):
                 with gr.Column():
                     in_audio = gr.File(source="upload", type="file", label="Input Any Audio", interactive=True)
                 with gr.Column():
-                    info = gr.Textbox(label="Audio Info", lines=20, interactive=False)
+                    info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
                     
         in_audio.change(get_audio_info, in_audio, outputs=[info])
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)

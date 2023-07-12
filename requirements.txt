@@ -19,4 +19,3 @@ demucs
 librosa
 gradio
 pytaglib
-mutagen
