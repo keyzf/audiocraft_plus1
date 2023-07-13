@@ -188,6 +188,31 @@ def get_audio_info(audio_path):
     else:
         return None
 
+def info_to_params(audio_path):
+    if audio_path is not None:
+        with taglib.File(audio_path.name, save_on_exit=False) as song:
+            json_string = song.tags['COMMENT'][0]
+            data = json.loads(json_string)
+            s = data['texts']
+            s = re.findall(r"'(.*?)'", s)
+            text = []
+            repeat = []
+            i = 0
+            for elem in s:
+                if elem.strip():
+                    if i == 0 or elem != s[i-1]:
+                        text.append(elem)
+                        repeat.append(1)
+                    else:
+                        repeat[-1] += 1
+                i += 1
+            text.extend([""] * (10 - len(text)))
+            repeat.extend([1] * (10 - len(repeat)))
+            unique_prompts = len([t for t in text if t])
+            return data['model'], unique_prompts, text[0], text[1], text[2], text[3], text[4], text[5], text[6], text[7], text[8], text[9], repeat[0], repeat[1], repeat[2], repeat[3], repeat[4], repeat[5], repeat[6], repeat[7], repeat[8], repeat[9], data['audio_mode'], int(data['duration']), float(data['topk']), float(data['topp']), float(data['temperature']), float(data['cfg_coef']), int(data['seed']), int(data['overlap']), data['channel'], data['sr_select']
+    else:
+        return "large", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
+
 def normalize_audio(audio_data):
     audio_data = audio_data.astype(np.float32)
     max_value = np.max(np.abs(audio_data))
@@ -348,7 +373,6 @@ def add_tags(filename, tags):
         }
 
     json_string = json.dumps(data)
-    print(json_string)
 
     if os.path.exists(filename):
         with taglib.File(filename, save_on_exit=True) as song:
@@ -488,8 +512,13 @@ def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
     tags = [str(texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(topk), str(topp), str(temperature), str(cfg_coef)]
     wav_target, mp4_target = save_outputs(outs[0], outs_audio[0], tags);
+    # Removes the temporary files.
+    for out in outs:
+        os.remove(out)
+    for out in outs_audio:
+        os.remove(out)
 
-    return mp4_target, wav_target, outs_backup[0], seed
+    return mp4_target, wav_target, outs_backup[0], [mp4_target, wav_target], seed
 
 max_textboxes = 10
 
@@ -555,9 +584,9 @@ def ui_full(launch_kwargs):
                     with gr.Tab("Customization"):
                         with gr.Row():
                             with gr.Column():
-                                background = gr.ColorPicker(value="#22A699", label="background color", interactive=True, scale=0)
-                                bar1 = gr.ColorPicker(value="#F2BE22", label="bar color start", interactive=True, scale=0)
-                                bar2 = gr.ColorPicker(value="#F29727", label="bar color end", interactive=True, scale=0)
+                                background = gr.ColorPicker(value="#0f0f0f", label="background color", interactive=True, scale=0)
+                                bar1 = gr.ColorPicker(value="#84cc16", label="bar color start", interactive=True, scale=0)
+                                bar2 = gr.ColorPicker(value="#10b981", label="bar color end", interactive=True, scale=0)
                             with gr.Column():
                                 image = gr.Image(label="Background Image", type="filepath", interactive=True, scale=4)
                                 with gr.Row():
@@ -590,6 +619,7 @@ def ui_full(launch_kwargs):
                             backup_only = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=False)
                             send_audio = gr.Button("Send to Input Audio")
                         seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
+                        download = gr.File(label="Generated Files", interactive=False)
                     with gr.Tab("Wiki"):
                         gr.Markdown(
                             """
@@ -728,7 +758,18 @@ def ui_full(launch_kwargs):
 
                             ### V1.2.7
 
-                            - When sending generated audio to Input Audio, it will send a backup audio with default settings (best for continuos generation)
+                            - When sending generated audio to Input Audio, it will send a backup audio with default settings  
+                            (best for continuos generation)
+
+                            - Added Metadata to generated audio (Thanks to AlexHK ♥)
+
+                            - Added Audio Info tab that will display the metadata of the input audio
+
+                            - Added "send to Text2Audio" button in Audio Info tab
+
+                            - Generated audio is now stored in the "output" folder (Thanks to AlexHK ♥)
+
+                            - Added an output area with generated files and download buttons
 
 
 
@@ -854,13 +895,15 @@ def ui_full(launch_kwargs):
             with gr.Row():
                 with gr.Column():
                     in_audio = gr.File(source="upload", type="file", label="Input Any Audio", interactive=True)
+                    send_gen = gr.Button("Send to Text2Audio", variant="primary")
                 with gr.Column():
                     info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
                     
+        send_gen.click(info_to_params, inputs=[in_audio], outputs=[model, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select], queue=False)
         in_audio.change(get_audio_info, in_audio, outputs=[info])
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         send_audio.click(fn=lambda x: x, inputs=[backup_only], outputs=[audio], queue=False)
-        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, seed_used])
+        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
 
         def variable_outputs(k):
@@ -881,39 +924,6 @@ def ui_full(launch_kwargs):
 
         image.change(get_size, image, outputs=[height, width])
         s.change(variable_outputs, s, textboxes)
-        gr.Examples(
-            fn=predict_full,
-            examples=[
-                [
-                    "An 80s driving pop song with heavy drums and synth pads in the background",
-                    "./assets/bach.mp3",
-                    "melody"
-                ],
-                [
-                    "A cheerful country song with acoustic guitars",
-                    "./assets/bolero_ravel.mp3",
-                    "melody"
-                ],
-                [
-                    "90s rock song with electric guitar and heavy drums",
-                    None,
-                    "medium"
-                ],
-                [
-                    "a light and cheerly EDM track, with syncopated drums, aery pads, and strong emotions",
-                    "./assets/bach.mp3",
-                    "melody"
-                ],
-                [
-                    "lofi slow bpm electro chill with organic samples",
-                    None,
-                    "medium",
-                ],
-            ],
-            inputs=[text0, audio, model],
-            outputs=[output]
-        )
-
         interface.queue().launch(**launch_kwargs)
 
 
