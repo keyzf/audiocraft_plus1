@@ -27,6 +27,7 @@ import json
 import shutil
 import taglib
 import torch
+import torchaudio
 import gradio as gr
 import numpy as np
 import typing as tp
@@ -213,11 +214,31 @@ def info_to_params(audio_path):
     else:
         return "large", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
 
+
+def make_pseudo_stereo (filename, sr_select, pan, delay):
+    if pan:
+        temp = AudioSegment.from_wav(filename)
+        if sr_select != "32000":
+            temp = temp.set_frame_rate(int(sr_select))
+        left = temp.pan(-0.5) - 5
+        right = temp.pan(0.6) - 5
+        temp = left.overlay(right, position=5)
+        temp.export(filename, format="wav")
+    if delay:     
+        waveform, sample_rate = torchaudio.load(filename) # load mono WAV file
+        delay_seconds = 0.01 # set delay 10ms
+        delay_samples = int(delay_seconds * sample_rate) # Calculating delay value in number of samples
+        stereo_waveform = torch.stack([waveform[0], torch.cat((torch.zeros(delay_samples), waveform[0][:-delay_samples]))]) # Generate a stereo file with original mono audio and delayed version
+        torchaudio.save(filename, stereo_waveform, sample_rate)
+    return
+
+
 def normalize_audio(audio_data):
     audio_data = audio_data.astype(np.float32)
     max_value = np.max(np.abs(audio_data))
     audio_data /= max_value
     return audio_data
+
 
 def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     maximum_size = 29.5
@@ -310,14 +331,9 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
             audio_write(
                 file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
-            temp = AudioSegment.from_wav(file.name)
+
             if channel == "stereo effect":
-                if sr_select != "32000":
-                    temp = temp.set_frame_rate(int(sr_select))
-                left = temp.pan(-0.5) - 5
-                right = temp.pan(0.6) - 5
-                temp = left.overlay(right, position=5)
-            temp.export(file.name, format="wav")
+                make_pseudo_stereo(file.name, sr_select, pan=True, delay=True);
 
             out_audios.append(file.name)
             out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
@@ -452,9 +468,9 @@ def clear_cash():
 def predict_full(model, custom_model, base_model, prompt_amount, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
     INTERRUPTING = False
-    
+
     #clear_cash();
-    
+
     if temperature < 0:
         raise gr.Error("Temperature must be >= 0.")
     if topk < 0:
@@ -770,6 +786,8 @@ def ui_full(launch_kwargs):
                             - Generated audio is now stored in the "output" folder (Thanks to AlexHK ♥)
 
                             - Added an output area with generated files and download buttons
+
+                            - Enhanced Stereo effect (Thanks to AlexHK ♥)
 
 
 
