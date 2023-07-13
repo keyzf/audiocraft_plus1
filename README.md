@@ -1,4 +1,4 @@
-![image](https://github.com/GrandaddyShmax/audiocraft_plus/assets/52707645/676fe7c7-e777-4ca7-8ac0-32243a958874)# Audiocraft Plus
+# Audiocraft Plus
 ![docs badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_docs/badge.svg)
 ![linter badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_linter/badge.svg)
 ![tests badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_tests/badge.svg)
