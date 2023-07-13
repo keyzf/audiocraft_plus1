@@ -18,3 +18,4 @@ xformers
 demucs
 librosa
 gradio
+pytaglib
