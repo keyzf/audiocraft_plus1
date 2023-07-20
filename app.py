@@ -693,7 +693,7 @@ def ui_full(launch_kwargs):
                                     global_prompt = gr.Text(label="Global Prompt", interactive=True, scale=3)
                         with gr.Row():
                             s = gr.Slider(1, max_textboxes, value=1, step=1, label="Prompts:", interactive=True, scale=2)
-                            s_mode = gr.Radio(["segmentation", "batch"], value="segmentation", interactive=True, scale=1, label="Generation Mode")
+                            #s_mode = gr.Radio(["segmentation", "batch"], value="segmentation", interactive=True, scale=1, label="Generation Mode")
                         with gr.Column():
                             textboxes = []
                             prompts = []
@@ -785,6 +785,26 @@ def ui_full(launch_kwargs):
 
                             ### Generation Tab:
 
+                            #### Structure Prompts:
+
+                            This feature helps reduce repetetive prompts by allowing you to set global prompts  
+                            that will be used for all prompt segments.
+
+                            - **[Structure Prompts (checkbox)]:**  
+                            Enable/Disable the structure prompts feature.
+
+                            - **[BPM (number)]:**  
+                            Beats per minute of the generated music.
+
+                            - **[Key (dropdown)]:**  
+                            The key of the generated music.
+
+                            - **[Scale (dropdown)]:**  
+                            The scale of the generated music.
+
+                            - **[Global Prompt (text)]:**  
+                            Here write the prompt that you wish to be used for all prompt segments.
+
                             #### Multi-Prompt: 
                             
                             This feature allows you to control the music, adding variation to different time segments.  
@@ -800,6 +820,12 @@ def ui_full(launch_kwargs):
 
                             - **[Repeat (number)]:**  
                             Write how many times this prompt will repeat (instead of wasting another prompt segment on the same prompt).
+
+                            - **[Time (text)]:**  
+                            The time of the prompt segment.
+
+                            - **[Calculate Timings (button)]:**  
+                            Calculates the timings of the prompt segments.
 
                             - **[Duration (number)]:**  
                             How long you want the generated music to be (in seconds).
@@ -1069,7 +1095,7 @@ def ui_full(launch_kwargs):
         in_audio.change(get_audio_info, in_audio, outputs=[info])
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         send_audio.click(fn=lambda x: x, inputs=[backup_only], outputs=[audio], queue=False)
-        submit.click(predict_full if s_mode != "batch" else predict_batched, inputs=[model, dropdown, basemodel, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
+        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
