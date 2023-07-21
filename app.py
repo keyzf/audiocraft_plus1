@@ -981,7 +981,7 @@ def ui_full(launch_kwargs):
 
                             - Adapted Audio info tab to work with the new structure prompts feature
 
-                            - Now custom models actually works, make sure you select the correct base model
+                            - Now custom models actually work, make sure you select the correct base model
 
 
 
