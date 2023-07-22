@@ -150,7 +150,7 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
             MODEL.lm.load_state_dict(torch.load(file_path))
         else:
             MODEL = MusicGen.get_pretrained(version)
-            MODEL.lm.load_state_dict(torch.load("models/" + str(version) + ".pt"))
+            #MODEL.lm.load_state_dict(torch.load("models/" + str(version) + ".pt"))
 
         return
     else:
@@ -723,7 +723,7 @@ def ui_full(launch_kwargs):
     with gr.Blocks(title='MusicGen+', theme=theme) as interface:
         gr.Markdown(
             """
-            # MusicGen+ V1.2.8a
+            # MusicGen+ V1.2.8b
 
             ## An All-in-One MusicGen WebUI
 
@@ -985,6 +985,12 @@ def ui_full(launch_kwargs):
                         gr.Markdown(
                             """
                             ## Changelog:
+
+                            ### V1.2.8b
+
+                            - Fixed the error when loading default models
+
+
 
                             ### V1.2.8a
 
