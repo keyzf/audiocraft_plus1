@@ -36,6 +36,7 @@ from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import MusicGen
 from audiocraft.utils import ui
+from components.visualization.visualizer import load_audio
 import subprocess, random, string
 
 theme = gr.themes.Base(
@@ -168,6 +169,14 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
         result = MODELS[version].to('cuda')
         print("Cached model loaded in %.2fs" % (time.monotonic() - t1))
         MODEL = result
+
+
+def visualize_audio(audio):
+    wave, sample = load_audio(audio)
+    print("test wave: " + str(wave))
+    print("test sample: " + str(sample))
+    return
+
 
 def get_audio_info(audio_path):
     if audio_path is not None:
@@ -1141,7 +1150,15 @@ def ui_full(launch_kwargs):
                     send_gen = gr.Button("Send to Text2Audio", variant="primary")
                 with gr.Column():
                     info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
+        with gr.Tab("Visualizer"):
+            with gr.Row():
+                with gr.Column():
+                    inp_audio = gr.Audio(source="upload", type="numpy", label="Input Audio", interactive=True)
+                    vis_button = gr.Button("Visualize", variant="primary")
+                with gr.Column():
+                    vis = gr.Video(label="Visualized Audio", scale=0)
                     
+        vis_button.click(visualize_audio, inputs=[inp_audio], outputs=[vis], queue=False)
         send_gen.click(info_to_params, inputs=[in_audio], outputs=[struc_prompts, global_prompt, bpm, key, scale, model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select], queue=False)
         in_audio.change(get_audio_info, in_audio, outputs=[info])
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
