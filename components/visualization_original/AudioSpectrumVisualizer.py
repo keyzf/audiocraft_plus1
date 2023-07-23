@@ -330,6 +330,7 @@ if __name__ == '__main__':
 
 	print("Creating bins. (3/{})".format(maxSteps))
 	bins = createBins(frameData)
+	print("bins: " + str(bins))
 	if args.smoothY > 0:
 		bins = smoothBinData(bins)
 	del frameData

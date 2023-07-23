@@ -36,7 +36,7 @@ from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import MusicGen
 from audiocraft.utils import ui
-from components.visualization.visualizer import load_audio, calculate_frameData
+from components.visualization.visualizer import load_audio, calculate_frameData, create_bins
 import subprocess, random, string
 
 theme = gr.themes.Base(
@@ -174,7 +174,9 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
 def visualize_audio(audio):
     wave, sample = load_audio(audio)
     frameData = calculate_frameData(wave, sample)
-    print("Frame Data: " + str(frameData))
+    del wave, sample
+    bins = create_bins(frameData)
+    print("bins: " + str(bins))
     return
 
 

@@ -5,6 +5,9 @@ import numpy as np
 channel = "avarage"
 framerate = 30
 duration = framerate/1000
+bins = 64
+xlog = 0
+ylog = 0
 
 def load_audio(audio_file):
     if not path.exists(audio_file):
@@ -15,6 +18,7 @@ def load_audio(audio_file):
 
 def calculate_frameData(fileData, samplerate):
     channels = []
+    channel = "avarage"
 
     if len(fileData.shape) > 1:
         if channel == "avarage":
@@ -63,3 +67,25 @@ def calculate_frameData(fileData, samplerate):
         frameData.append(channelFrameData)
 
     return frameData
+
+def create_bins(frameData):
+    bins = []
+    for channel in frameData:
+        channelBins = []
+        for data in channel:
+            frameBins = []
+            for i in range(bins):
+                if xlog == 0:
+                    dataStart = int(i * len(data) / bins)
+                    dataEnd = int((i + 1) * len(data) / bins)
+                else:
+                    dataStart = int((i/bins)**xlog * len(data))
+                    dataEnd = int(((i+1)/bins)**xlog * len(data))
+                if dataStart == dataEnd:
+                    dataEnd += 1
+                frameBins.append(np.mean(data[dataStart:dataEnd]))
+            channelBins.append(frameBins)
+        
+        bins.append(channelBins)
+
+    return bins
