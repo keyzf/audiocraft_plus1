@@ -36,7 +36,7 @@ from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import MusicGen
 from audiocraft.utils import ui
-from components.visualization.visualizer import load_audio
+from components.visualization.visualizer import load_audio, calculate_frameData
 import subprocess, random, string
 
 theme = gr.themes.Base(
@@ -173,8 +173,8 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
 
 def visualize_audio(audio):
     wave, sample = load_audio(audio)
-    print("test wave: " + str(wave))
-    print("test sample: " + str(sample))
+    frameData = calculate_frameData(wave, sample)
+    print("Frame Data: " + str(frameData))
     return
 
 
@@ -1159,7 +1159,7 @@ def ui_full(launch_kwargs):
         with gr.Tab("Visualizer"):
             with gr.Row():
                 with gr.Column():
-                    inp_audio = gr.Audio(source="upload", type="numpy", label="Input Audio", interactive=True)
+                    inp_audio = gr.Audio(source="upload", type="filepath", label="Input Audio", interactive=True)
                     vis_button = gr.Button("Visualize", variant="primary")
                 with gr.Column():
                     vis = gr.Video(label="Visualized Audio", scale=0)
