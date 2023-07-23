@@ -2,7 +2,8 @@ from os import path
 from audio2numpy import open_audio
 import numpy as np
 
-framerate = 60
+channel = "avarage"
+framerate = 30
 duration = framerate/1000
 
 def load_audio(audio_file):
@@ -16,8 +17,15 @@ def calculate_frameData(fileData, samplerate):
     channels = []
 
     if len(fileData.shape) > 1:
-        for channel in range(fileData.shape[1]):
-            channels.append(fileData[:, channel])
+        if channel == "avarage":
+            channels.append(np.mean(fileData, axis=1))
+        elif channel == "left":
+            channels.append(fileData[:,0])
+        elif channel == "right":
+            channels.append(fileData[:,1])
+        else:
+            for i in range(fileData.shape[1]):
+                channels.append(fileData[:,i])
     else:
         channels.append(fileData)
     
