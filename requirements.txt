@@ -18,4 +18,4 @@ xformers
 demucs
 librosa
 gradio
-pytaglib
+pytaglib==2.0.0
