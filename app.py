@@ -34,11 +34,11 @@ import typing as tp
 
 from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
-from audiocraft.models import MusicGen
+from audiocraft.models import MusicGen, MultiBandDiffusion
 from audiocraft.utils import ui
 import subprocess, random, string
 
-version = "1.2.8c"
+version = "2.0.0"
 
 theme = gr.themes.Base(
     primary_hue="lime",
@@ -58,6 +58,7 @@ INTERRUPTED = False
 UNLOAD_MODEL = False
 MOVE_TO_CPU = False
 IS_BATCHED = "facebook/MusicGen" in os.environ.get('SPACE_ID', '')
+print(IS_BATCHED)
 MAX_BATCH_SIZE = 12
 BATCHED_DURATION = 15
 INTERRUPTING = False
@@ -80,7 +81,7 @@ def resize_video(input_path, output_path, target_width, target_height):
     subprocess.run(ffmpeg_cmd)
 
 def _call_nostderr(*args, **kwargs):
-    # Avoid ffmpeg vomitting on the logs.
+    # Avoid ffmpeg vomiting on the logs.
     kwargs['stderr'] = sp.DEVNULL
     kwargs['stdout'] = sp.DEVNULL
     _old_call(*args, **kwargs)
@@ -119,6 +120,7 @@ class FileCleaner:
 
 file_cleaner = FileCleaner()
 
+
 def make_waveform(*args, **kwargs):
     # Further remove some warnings.
     be = time.time()
@@ -144,6 +146,7 @@ def make_waveform(*args, **kwargs):
 def load_model(version='melody', custom_model=None, base_model='medium'):
     global MODEL, MODELS
     print("Loading model", version)
+    
     if MODELS is None:
         if version == 'custom':
             MODEL = MusicGen.get_pretrained(base_model)
@@ -151,9 +154,8 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
             MODEL.lm.load_state_dict(torch.load(file_path))
         else:
             MODEL = MusicGen.get_pretrained(version)
-            #MODEL.lm.load_state_dict(torch.load("models/" + str(version) + ".pt"))
 
-        return
+
     else:
         t1 = time.monotonic()
         if MODEL is not None:
@@ -363,6 +365,12 @@ def normalize_audio(audio_data):
     return audio_data
 
 
+def load_diffusion():
+    global MBD
+    print("loading MBD")
+    MBD = MultiBandDiffusion.get_mbd_musicgen()
+
+
 def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     maximum_size = 29.5
     cut_size = 0
@@ -409,7 +417,7 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
             melody = melody[..., :int(sr * duration)]
             melody = convert_audio(melody, sr, target_sr, target_ac)
             processed_melodies.append(melody)
-    
+
     if sample is not None:
         if sampleP is None:
             outputs = MODEL.generate_continuation(
@@ -436,11 +444,18 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
             melody_wavs=processed_melodies,
             melody_sample_rate=target_sr,
             progress=progress,
+            return_tokens=USE_DIFFUSION
         )
     else:
-        outputs = MODEL.generate(texts, progress=progress)
+        outputs = MODEL.generate(texts, progress=progress, return_tokens=USE_DIFFUSION)
+
+    if USE_DIFFUSION:
+        outputs_diffusion = MBD.tokens_to_wav(outputs[1])
+        outputs = torch.cat([outputs[0], outputs_diffusion], dim=0)
 
     outputs = outputs.detach().cpu().float()
+    pending_videos = []
+    out_wavs = []
     backups = outputs
     if channel == "stereo":
         outputs = convert_audio(outputs, target_sr, int(sr_select), 2)
@@ -455,6 +470,8 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
                 file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
 
+            pending_videos.append(pool.submit(make_waveform, file.name))
+            out_wavs.append(file.name)
             if channel == "stereo effect":
                 make_pseudo_stereo(file.name, sr_select, pan=True, delay=True);
 
@@ -468,11 +485,11 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
             out_backup.append(file.name)
             file_cleaner.add(file.name)
-    res = [out_file.result() for out_file in out_files]
+    out_videos = [pending_video.result() for pending_video in pending_videos]
     res_audio = out_audios
     res_backup = out_backup
-    for file in res:
-        file_cleaner.add(file)
+    for video in out_videos:
+        file_cleaner.add(video)
     print("batch finished", len(texts), time.time() - be)
     print("Tempfiles currently stored: ", len(file_cleaner.files))
     if MOVE_TO_CPU:
@@ -481,7 +498,7 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         MODEL = None
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
-    return res, res_audio, res_backup, input_length
+    return out_videos, out_wavs, res_backup, input_length
 
 
 def predict_batched(model, custom_model, base_model, prompt_amount, struc_prompt, bpm, key, scale, global_prompt, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
@@ -489,7 +506,7 @@ def predict_batched(model, custom_model, base_model, prompt_amount, struc_prompt
     texts = [text[:max_text_length] for text in texts]
     load_model('melody')
     res = _do_predictions(texts, melodies, BATCHED_DURATION)
-    return [res]
+    return res
 
 
 def add_tags(filename, tags): 
@@ -656,12 +673,10 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, custom_model, base_model, prompt_amount, struc_prompt, bpm, key, scale, global_prompt, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
+def predict_full(model, custom_model, base_model, decoder, prompt_amount, struc_prompt, bpm, key, scale, global_prompt, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
+    global USE_DIFFUSION
     INTERRUPTING = False
-
-    #clear_cash();
-
     if temperature < 0:
         raise gr.Error("Temperature must be >= 0.")
     if topk < 0:
@@ -685,6 +700,14 @@ def predict_full(model, custom_model, base_model, prompt_amount, struc_prompt, b
         seed = random.randint(0, 0xffff_ffff_ffff)
     torch.manual_seed(seed)
     predict_full.last_upd = time.monotonic()
+
+    if decoder == "MultiBand_Diffusion":
+        USE_DIFFUSION = True
+        load_diffusion()
+    else:
+        USE_DIFFUSION = False
+    load_model(model)
+
     def _progress(generated, to_generate):
         if time.monotonic() - predict_full.last_upd > 1:
             progress((generated, to_generate))
@@ -731,13 +754,15 @@ def predict_full(model, custom_model, base_model, prompt_amount, struc_prompt, b
         ind2 = 0
         ind = ind + 1
 
-    outs, outs_audio, outs_backup, input_length = _do_predictions(
+    videos, wavs, outs_backup, input_length = _do_predictions(
         [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
+    if USE_DIFFUSION:
+        return videos[0], wavs[0], videos[1], wavs[1]
     tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(custom_model), str(base_model), str(topk), str(topp), str(temperature), str(cfg_coef)]
-    wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags);
+    wav_target, mp4_target, json_target = save_outputs(videos[0], wavs[0], tags);
     # Removes the temporary files.
-    for out in outs:
+    for out in videos:
         os.remove(out)
     for out in outs_audio:
         os.remove(out)
@@ -755,18 +780,26 @@ def toggle_audio_src(choice):
     else:
         return gr.update(source="upload", value=None, label="File")
 
+
+def toggle_diffusion(choice):
+    if choice == "MultiBand_Diffusion":
+        return [gr.update(visible=True)] * 2
+    else:
+        return [gr.update(visible=False)] * 2
+
+
 def ui_full(launch_kwargs):
     with gr.Blocks(title='MusicGen+', theme=theme) as interface:
         gr.Markdown(
             """
-            # MusicGen+ V1.2.8c
+            # MusicGen+ V2.0.0c
 
             ## An All-in-One MusicGen WebUI
 
             Thanks to: facebookresearch, Camenduru, rkfg, oobabooga, AlexHK and GrandaddyShmax
             """
         )
-        with gr.Tab("Text2Audio"):
+        with gr.Tab("Text2Music"):
             with gr.Row():
                 with gr.Column():
                     with gr.Tab("Generation"):
@@ -843,10 +876,13 @@ def ui_full(launch_kwargs):
                                 ui.create_refresh_button(dropdown, lambda: None, lambda: {'choices': get_available_models()}, 'refresh-button')
                                 basemodel = gr.Radio(["small", "medium", "melody", "large"], label="Base Model", value="medium", interactive=True, scale=1)
                         with gr.Row():
+                            decoder = gr.Radio(["Default", "MultiBand_Diffusion"],
+                                               label="Decoder", value="Default", interactive=True)
+                        with gr.Row():
                             topk = gr.Number(label="Top-k", value=250, interactive=True)
                             topp = gr.Number(label="Top-p", value=0, interactive=True)
                             temperature = gr.Number(label="Temperature", value=1.0, interactive=True)
-                            cfg_coef = gr.Number(label="Classifier Free Guidance", value=5.0, interactive=True)
+                            cfg_coef = gr.Number(label="Classifier Free Guidance", value=3.0, interactive=True)
                     with gr.Row():
                         submit = gr.Button("Generate", variant="primary")
                         # Adapted from https://github.com/rkfg/audiocraft/blob/long/app.py, MIT license.
@@ -855,10 +891,12 @@ def ui_full(launch_kwargs):
                     with gr.Tab("Output"):
                         output = gr.Video(label="Generated Music", scale=0)
                         with gr.Row():
-                            audio_only = gr.Audio(type="numpy", label="Audio Only", interactive=False)
+                            audio_output = gr.Audio(type="numpy", label="Audio Only", interactive=False)
                             backup_only = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=False)
                             send_audio = gr.Button("Send to Input Audio")
                         seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
+                        diffusion_output = gr.Video(label="MultiBand Diffusion Decoder")
+                        audio_diffusion = gr.Audio(label="MultiBand Diffusion Decoder (wav)", type='filepath')
                         download = gr.File(label="Generated Files", interactive=False)
                     with gr.Tab("Wiki"):
                         gr.Markdown(
@@ -1198,12 +1236,12 @@ def ui_full(launch_kwargs):
                     send_gen = gr.Button("Send to Text2Audio", variant="primary")
                 with gr.Column():
                     info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
-                    
+
         send_gen.click(info_to_params, inputs=[in_audio], outputs=[struc_prompts, global_prompt, bpm, key, scale, model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select], queue=False)
         in_audio.change(get_audio_info, in_audio, outputs=[info])
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         send_audio.click(fn=lambda x: x, inputs=[backup_only], outputs=[audio], queue=False)
-        submit.click(predict_full, inputs=[model, dropdown, basemodel, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
+        submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False, show_progress=False).then(predict_full, inputs=[model, dropdown, basemodel, decoder, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_output, backup_only, download, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
@@ -1234,11 +1272,14 @@ def ui_batched(launch_kwargs):
             """
             # MusicGen
 
-            This is the demo for [MusicGen](https://github.com/facebookresearch/audiocraft), a simple and controllable model for music generation
+            This is the demo for [MusicGen](https://github.com/facebookresearch/audiocraft),
+            a simple and controllable model for music generation
             presented at: ["Simple and Controllable Music Generation"](https://huggingface.co/papers/2306.05284).
             <br/>
-            <a href="https://huggingface.co/spaces/facebook/MusicGen?duplicate=true" style="display: inline-block;margin-top: .5em;margin-right: .25em;" target="_blank">
-            <img style="margin-bottom: 0em;display: inline;margin-top: -.25em;" src="https://bit.ly/3gLdBN6" alt="Duplicate Space"></a>
+            <a href="https://huggingface.co/spaces/facebook/MusicGen?duplicate=true"
+                style="display: inline-block;margin-top: .5em;margin-right: .25em;" target="_blank">
+            <img style="margin-bottom: 0em;display: inline;margin-top: -.25em;"
+                src="https://bit.ly/3gLdBN6" alt="Duplicate Space"></a>
             for longer sequences, more control and no queue.</p>
             """
         )
@@ -1247,13 +1288,17 @@ def ui_batched(launch_kwargs):
                 with gr.Row():
                     text = gr.Text(label="Describe your music", lines=2, interactive=True)
                     with gr.Column():
-                        radio = gr.Radio(["file", "mic"], value="file", label="Condition on a melody (optional) File or Mic")
-                        melody = gr.Audio(source="upload", type="numpy", label="File", interactive=True, elem_id="melody-input")
+                        radio = gr.Radio(["file", "mic"], value="file",
+                                         label="Condition on a melody (optional) File or Mic")
+                        melody = gr.Audio(source="upload", type="numpy", label="File",
+                                          interactive=True, elem_id="melody-input")
                 with gr.Row():
                     submit = gr.Button("Generate")
             with gr.Column():
                 output = gr.Video(label="Generated Music")
-        submit.click(predict_batched, inputs=[text, melody], outputs=[output], batch=True, max_batch_size=MAX_BATCH_SIZE)
+                audio_output = gr.Audio(label="Generated Music (wav)", type='filepath')
+        submit.click(predict_batched, inputs=[text, melody],
+                     outputs=[output, audio_output], batch=True, max_batch_size=MAX_BATCH_SIZE)
         radio.change(toggle_audio_src, radio, [melody], queue=False, show_progress=False)
         gr.Examples(
             fn=predict_batched,
@@ -1281,6 +1326,20 @@ def ui_batched(launch_kwargs):
             ],
             inputs=[text, melody],
             outputs=[output]
+        )
+        gr.Markdown("""
+        ### More details
+
+        The model will generate 12 seconds of audio based on the description you provided.
+        You can optionally provide a reference audio from which a broad melody will be extracted.
+        The model will then try to follow both the description and melody provided.
+        All samples are generated with the `melody` model.
+
+        You can also use your own GPU or a Google Colab by following the instructions on our repo.
+
+        See [github.com/facebookresearch/audiocraft](https://github.com/facebookresearch/audiocraft)
+        for more details.
+        """
         )
 
         demo.queue(max_size=8 * 4).launch(**launch_kwargs)
@@ -1344,6 +1403,8 @@ if __name__ == "__main__":
 
     # Show the interface
     if IS_BATCHED:
+        global USE_DIFFUSION
+        USE_DIFFUSION = False
         ui_batched(launch_kwargs)
     else:
         ui_full(launch_kwargs)
