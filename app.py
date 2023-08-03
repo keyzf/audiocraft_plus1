@@ -678,7 +678,7 @@ def ui_full(launch_kwargs):
     with gr.Blocks(title='MusicGen+', theme=theme) as interface:
         gr.Markdown(
             """
-            # MusicGen+ V1.2.8c
+            # MusicGen+ V1.2.8c Mac OS Version
 
             ## An All-in-One MusicGen WebUI
 
