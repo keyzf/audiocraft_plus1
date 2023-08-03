@@ -1,11 +1,8 @@
-"""
- Copyright (c) Meta Platforms, Inc. and affiliates.
- All rights reserved.
- 
- This source code is licensed under the license found in the
- LICENSE file in the root directory of this source tree.
- 
-"""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 from pathlib import Path
 
@@ -13,11 +10,11 @@ from setuptools import setup, find_packages
 
 
 NAME = 'audiocraft'
-DESCRIPTION = 'Audio research library for PyTorch'
+DESCRIPTION = 'Audio generation research library for PyTorch'
 
-URL = 'https://github.com/fairinternal/audiocraft'
+URL = 'https://github.com/facebookresearch/audiocraft'
 AUTHOR = 'FAIR Speech & Audio'
-EMAIL = 'defossez@meta.com'
+EMAIL = 'defossez@meta.com, jadecopet@meta.com'
 REQUIRES_PYTHON = '>=3.8.0'
 
 for line in open('audiocraft/__init__.py'):

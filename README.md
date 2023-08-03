@@ -3,7 +3,8 @@
 ![linter badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_linter/badge.svg)
 ![tests badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_tests/badge.svg)
 
-Audiocraft is a PyTorch library for deep learning research on audio generation. At the moment, it contains the code for MusicGen, a state-of-the-art controllable text-to-music model.
+AudioCraft is a PyTorch library for deep learning research on audio generation. AudioCraft contains inference and training code
+for two state-of-the-art AI generative models producing high-quality audio: AudioGen and MusicGen.
 
 # MusicGen+ An All-in-one Webui for MusicGen
 
