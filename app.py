@@ -339,8 +339,9 @@ def normalize_audio(audio_data):
 
 def load_diffusion():
     global MBD
-    print("loading MBD")
-    MBD = MultiBandDiffusion.get_mbd_musicgen()
+    if MBD is None:
+        print("loading MBD")
+        MBD = MultiBandDiffusion.get_mbd_musicgen()
 
 
 def _do_predictions(texts, melodies, duration, image, height, width, background, bar1, bar2, progress=False, **gen_kwargs):
