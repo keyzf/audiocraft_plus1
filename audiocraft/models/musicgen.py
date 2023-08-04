@@ -85,7 +85,7 @@ class MusicGen:
         return self.compression_model.channels
 
     @staticmethod
-    def get_pretrained(name: str = 'melody', device=None):
+    def get_pretrained(name: str = 'GrandaddyShmax/musicgen-melody', device=None):
         """Return pretrained model, we provide four models:
         - facebook/musicgen-small (300M), text to music,
           # see: https://huggingface.co/facebook/musicgen-small
@@ -108,7 +108,6 @@ class MusicGen:
             lm = get_debug_lm_model(device)
             return MusicGen(name, compression_model, lm, max_duration=30)
 
-        name = "GrandaddyShmax/musicgen-" + name
         lm = load_lm_model(name, device=device)
         compression_model = load_compression_model(name, device=device)
         if 'self_wav' in lm.condition_provider.conditioners:

@@ -128,6 +128,7 @@ def make_waveform(*args, **kwargs):
 def load_model(version='melody'):
     global MODEL
     print("Loading model", version)
+    version = "GrandaddyShmax/musicgen-" + version
     if MODEL is None or MODEL.name != version:
         MODEL = MusicGen.get_pretrained(version)
 
@@ -590,8 +591,8 @@ def predict_full(model, decoder, text, melody, duration, topk, topp, temperature
         [text], [melody], duration, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef)
     if USE_DIFFUSION:
-        return videos[0], None, videos[1], None, seed
-    return videos[0], None, None, None, seed
+        return videos[0], None, videos[1], seed
+    return videos[0], None, None, seed
 
 
 max_textboxes = 10
@@ -1022,7 +1023,7 @@ def ui_full(launch_kwargs):
         submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False,
                      show_progress=False).then(predict_full, inputs=[model, decoder, text, melody, duration, topk, topp,
                                                                      temperature, cfg_coef, seed],
-                                               outputs=[output, diffusion_output, audio_diffusion])
+                                               outputs=[output, diffusion_output, audio_diffusion, seed_used])
         input_type.change(toggle_audio_src, input_type, [melody], queue=False, show_progress=False)
         interface.queue().launch(**launch_kwargs)
 
