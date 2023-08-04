@@ -108,6 +108,7 @@ class MusicGen:
             lm = get_debug_lm_model(device)
             return MusicGen(name, compression_model, lm, max_duration=30)
 
+        name = "GrandaddyShmax/musicgen-" + name
         lm = load_lm_model(name, device=device)
         compression_model = load_compression_model(name, device=device)
         if 'self_wav' in lm.condition_provider.conditioners:
