@@ -141,9 +141,11 @@ def _do_predictions(texts, melodies, duration, progress=False, **gen_kwargs):
             pending_videos.append(pool.submit(make_waveform, file.name))
             out_wavs.append(file.name)
             file_cleaner.add(file.name)
+            print(f'wav: {file.name}')
     out_videos = [pending_video.result() for pending_video in pending_videos]
     for video in out_videos:
         file_cleaner.add(video)
+        print(f'video: {video}')
     print("batch finished", len(texts), time.time() - be)
     print("Tempfiles currently stored: ", len(file_cleaner.files))
     return out_videos, out_wavs
@@ -182,12 +184,12 @@ def predict_full(model, decoder, text, melody, duration, topk, topp, temperature
             raise gr.Error("Interrupted.")
     MODEL.set_custom_progress_callback(_progress)
 
-    videos, wavs = _do_predictions(
+    videos, _ = _do_predictions(
         [text], [melody], duration, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef)
     if USE_DIFFUSION:
-        return videos[0], wavs[0], videos[1], wavs[1]
-    return videos[0], wavs[0], None, None
+        return videos[0], None, videos[1], None
+    return videos[0], None, None, None
 
 
 def toggle_audio_src(choice):
@@ -230,10 +232,12 @@ def ui_full(launch_kwargs):
                 with gr.Row():
                     model = gr.Radio(["facebook/musicgen-melody", "facebook/musicgen-medium", "facebook/musicgen-small",
                                       "facebook/musicgen-large"],
-                                     label="Model", value="facebook/musicgen-melody", interactive=True)
+                                     label="Model", value="facebook/musicgen-large", interactive=True)
+            
                 with gr.Row():
                     decoder = gr.Radio(["Default", "MultiBand_Diffusion"],
                                        label="Decoder", value="Default", interactive=True)
+                
                 with gr.Row():
                     duration = gr.Slider(minimum=1, maximum=120, value=10, label="Duration", interactive=True)
                 with gr.Row():
@@ -243,13 +247,13 @@ def ui_full(launch_kwargs):
                     cfg_coef = gr.Number(label="Classifier Free Guidance", value=3.0, interactive=True)
             with gr.Column():
                 output = gr.Video(label="Generated Music")
-                audio_output = gr.Audio(label="Generated Music (wav)", type='filepath')
+                #audio_output = gr.Audio(label="Generated Music (wav)", type='filepath')
                 diffusion_output = gr.Video(label="MultiBand Diffusion Decoder")
                 audio_diffusion = gr.Audio(label="MultiBand Diffusion Decoder (wav)", type='filepath')
         submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False,
                      show_progress=False).then(predict_full, inputs=[model, decoder, text, melody, duration, topk, topp,
                                                                      temperature, cfg_coef],
-                                               outputs=[output, audio_output, diffusion_output, audio_diffusion])
+                                               outputs=[output, diffusion_output, audio_diffusion])
         radio.change(toggle_audio_src, radio, [melody], queue=False, show_progress=False)
 
         gr.Examples(
