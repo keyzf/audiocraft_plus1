@@ -11,24 +11,10 @@ Utility to export a training checkpoint to a lightweight release checkpoint.
 from pathlib import Path
 import typing as tp
 
-from omegaconf import OmegaConf, DictConfig
+from omegaconf import OmegaConf
 import torch
 
 from audiocraft import __version__
-
-def _clean_lm_cfg(cfg: DictConfig):
-    OmegaConf.set_struct(cfg, False)
-    # This used to be set automatically in the LM solver, need a more robust solution
-    # for the future.
-    cfg['transformer_lm']['card'] = 2048
-    cfg['transformer_lm']['n_q'] = 4
-    # Experimental params no longer supported.
-    bad_params = ['spectral_norm_attn_iters', 'spectral_norm_ff_iters',
-                  'residual_balancer_attn', 'residual_balancer_ff', 'layer_drop']
-    for name in bad_params:
-        del cfg['transformer_lm'][name]
-    OmegaConf.set_struct(cfg, True)
-    return cfg
 
 
 def export_encodec(checkpoint_path: tp.Union[Path, str], out_file: tp.Union[Path, str]):

@@ -10,7 +10,6 @@ and provide easy access to the generation API.
 """
 
 import typing as tp
-import os
 import warnings
 
 import torch
@@ -30,11 +29,12 @@ MelodyType = tp.Union[torch.Tensor, MelodyList]
 
 # backward compatible names mapping
 _HF_MODEL_CHECKPOINTS_MAP = {
-    "small": "GrandaddyShmax/musicgen-small",
-    "medium": "GrandaddyShmax/musicgen-medium",
-    "large": "GrandaddyShmax/musicgen-large",
-    "melody": "GrandaddyShmax/musicgen-melody",
+    "small": "facebook/musicgen-small",
+    "medium": "facebook/musicgen-medium",
+    "large": "facebook/musicgen-large",
+    "melody": "facebook/musicgen-melody",
 }
+
 
 class MusicGen:
     """MusicGen main model with convenient generation API.
@@ -85,7 +85,7 @@ class MusicGen:
         return self.compression_model.channels
 
     @staticmethod
-    def get_pretrained(name: str = 'melody', device=None):
+    def get_pretrained(name: str = 'facebook/musicgen-melody', device=None):
         """Return pretrained model, we provide four models:
         - facebook/musicgen-small (300M), text to music,
           # see: https://huggingface.co/facebook/musicgen-small
@@ -322,16 +322,12 @@ class MusicGen:
         Returns:
             torch.Tensor: Generated audio, of shape [B, C, T], T is defined by the generation params.
         """
-        i = 0
-        prompt_list = attributes[0].text['description']
         total_gen_len = int(self.duration * self.frame_rate)
         max_prompt_len = int(min(self.duration, self.max_duration) * self.frame_rate)
         current_gen_offset: int = 0
 
         def _progress_callback(generated_tokens: int, tokens_to_generate: int):
             generated_tokens += current_gen_offset
-            if current_gen_offset > 0:
-                generated_tokens += (self.max_duration - self.extend_stride) * self.frame_rate
             if self._progress_callback is not None:
                 # Note that total_gen_len might be quite wrong depending on the
                 # codebook pattern used, but with delay it is almost accurate.
@@ -350,7 +346,6 @@ class MusicGen:
         if self.duration <= self.max_duration:
             # generate by sampling from LM, simple case.
             with self.autocast:
-                attributes[0].text['description'] = prompt_list[0]
                 gen_tokens = self.lm.generate(
                     prompt_tokens, attributes,
                     callback=callback, max_gen_len=total_gen_len, **self.generation_params)
@@ -389,13 +384,9 @@ class MusicGen:
                         [self.sample_rate] * ref_wav[0].size(0),
                         [None], [0.])
                 with self.autocast:
-                    if i >= len(prompt_list):
-                        i = len(prompt_list) - 1
-                    attributes[0].text['description'] = prompt_list[i]
                     gen_tokens = self.lm.generate(
                         prompt_tokens, attributes,
                         callback=callback, max_gen_len=max_gen_len, **self.generation_params)
-                    i = i + 1
                 if prompt_tokens is None:
                     all_tokens.append(gen_tokens)
                 else:
@@ -413,8 +404,3 @@ class MusicGen:
         with torch.no_grad():
             gen_audio = self.compression_model.decode(gen_tokens, None)
         return gen_audio
-
-    def to(self, device: str):
-        self.compression_model.to(device)
-        self.lm.to(device)
-        return self

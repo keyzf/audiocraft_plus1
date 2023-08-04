@@ -10,7 +10,6 @@ from the Hydra config.
 """
 
 import typing as tp
-import warnings
 
 import audiocraft
 import omegaconf

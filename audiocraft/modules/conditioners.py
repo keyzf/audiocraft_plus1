@@ -20,10 +20,8 @@ import einops
 from num2words import num2words
 import spacy
 from transformers import RobertaTokenizer, T5EncoderModel, T5Tokenizer  # type: ignore
-import torchaudio
 import torch
 from torch import nn
-from torch import Tensor
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
@@ -60,7 +58,6 @@ class JointEmbedCondition(tp.NamedTuple):
     sample_rate: tp.List[int]
     path: tp.List[tp.Optional[str]] = []
     seek_time: tp.List[tp.Optional[float]] = []
-
 
 
 @dataclass
@@ -399,7 +396,6 @@ class T5Conditioner(TextConditioner):
         self.name = name
         self.finetune = finetune
         self.word_dropout = word_dropout
-
         if autocast_dtype is None or self.device == 'cpu':
             self.autocast = TorchAutocast(enabled=False)
             if self.device != 'cpu':
@@ -1070,13 +1066,11 @@ class AttributeDropout(DropoutModule):
             return samples
 
         samples = deepcopy(samples)
-
         for condition_type, ps in self.p.items():  # for condition types [text, wav]
             for condition, p in ps.items():  # for attributes of each type (e.g., [artist, genre])
                 if torch.rand(1, generator=self.rng).item() < p:
                     for sample in samples:
                         dropout_condition(sample, condition_type, condition)
-
         return samples
 
     def __repr__(self):
@@ -1112,12 +1106,10 @@ class ClassifierFreeGuidanceDropout(DropoutModule):
 
         # nullify conditions of all attributes
         samples = deepcopy(samples)
-
         for condition_type in ["wav", "text"]:
             for sample in samples:
                 for condition in sample.attributes[condition_type]:
                     dropout_condition(sample, condition_type, condition)
-
         return samples
 
     def __repr__(self):
