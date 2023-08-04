@@ -120,7 +120,19 @@ def make_waveform(*args, **kwargs):
     be = time.time()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        out = gr.make_waveform(*args, **kwargs)
+        height = kwargs.pop('height')
+        width = kwargs.pop('width')
+        if height < 256:
+            height = 256
+        if width < 256:
+            width = 256
+        waveform_video = gr.make_waveform(*args, **kwargs)
+        out = f"{generate_random_string(12)}.mp4"
+        image = kwargs.get('bg_image', None)
+        if image is None:
+            resize_video(waveform_video, out, 900, 300)
+        else:
+            resize_video(waveform_video, out, width, height)
         print("Make a video took", time.time() - be)
         return out
 
@@ -331,7 +343,7 @@ def load_diffusion():
     MBD = MultiBandDiffusion.get_mbd_musicgen()
 
 
-def _do_predictions(texts, melodies, duration, progress=False, **gen_kwargs):
+def _do_predictions(texts, melodies, duration, image, height, width, background, bar1, bar2, progress=False, **gen_kwargs):
     MODEL.set_generation_params(duration=duration, **gen_kwargs)
     print("new batch", len(texts), texts, [None if m is None else (m[0], m[1].shape) for m in melodies])
     be = time.time()
@@ -370,7 +382,7 @@ def _do_predictions(texts, melodies, duration, progress=False, **gen_kwargs):
             audio_write(
                 file.name, output, MODEL.sample_rate, strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
-            pending_videos.append(pool.submit(make_waveform, file.name))
+            pending_videos.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             out_wavs.append(file.name)
             file_cleaner.add(file.name)
             print(f'wav: {file.name}')
@@ -555,7 +567,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap, progress=gr.Progress()):
+def predict_full(model, decoder, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -588,7 +600,7 @@ def predict_full(model, decoder, text, melody, duration, topk, topp, temperature
     MODEL.set_custom_progress_callback(_progress)
 
     videos, _ = _do_predictions(
-        [text], [melody], duration, progress=True,
+        [text], [melody], duration, image, height, width, background, bar1, bar2, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
     if USE_DIFFUSION:
         return videos[0], None, videos[1], seed
@@ -657,6 +669,18 @@ def ui_full(launch_kwargs):
                                 input_type = gr.Radio(["file", "mic"], value="file", label="Input Type (optional)", interactive=True)
                                 mode = gr.Radio(["melody", "sample"], label="Input Audio Mode (optional)", value="sample", interactive=True)
                             audio = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
+
+                    with gr.Tab("Customization"):
+                        with gr.Row():
+                            with gr.Column():
+                                background = gr.ColorPicker(value="#0f0f0f", label="background color", interactive=True, scale=0)
+                                bar1 = gr.ColorPicker(value="#84cc16", label="bar color start", interactive=True, scale=0)
+                                bar2 = gr.ColorPicker(value="#10b981", label="bar color end", interactive=True, scale=0)
+                            with gr.Column():
+                                image = gr.Image(label="Background Image", type="filepath", interactive=True, scale=4)
+                                with gr.Row():
+                                    height = gr.Number(label="Height", value=512, interactive=True)
+                                    width = gr.Number(label="Width", value=768, interactive=True)
 
                     with gr.Tab("Settings"):
                         with gr.Row():
@@ -1022,9 +1046,24 @@ def ui_full(launch_kwargs):
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False,
                      show_progress=False).then(predict_full, inputs=[model, decoder, text, audio, duration, topk, topp,
-                                                                     temperature, cfg_coef, seed, overlap],
+                                                                     temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2],
                                                outputs=[output, diffusion_output, audio_diffusion, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
+
+        def get_size(image):
+            if image is not None:
+                img = Image.open(image)
+                img_height = img.height
+                img_width = img.width
+                if (img_height%2) != 0:
+                    img_height = img_height + 1
+                if (img_width%2) != 0:
+                    img_width = img_width + 1
+                return img_height, img_width
+            else:
+                return 512, 768
+
+        image.change(get_size, image, outputs=[height, width])
         interface.queue().launch(**launch_kwargs)
 
 
