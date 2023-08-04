@@ -53,6 +53,7 @@ print(IS_BATCHED)
 MAX_BATCH_SIZE = 12
 BATCHED_DURATION = 15
 INTERRUPTING = False
+MBD = None
 # We have to wrap subprocess call to clean a bit the log when using gr.make_waveform
 _old_call = sp.call
 
