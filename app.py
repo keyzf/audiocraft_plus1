@@ -555,7 +555,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, melody, duration, topk, topp, temperature, cfg_coef, seed, progress=gr.Progress()):
+def predict_full(model, decoder, text, melody, duration, topk, topp, temperature, cfg_coef, seed, overlap, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -589,7 +589,7 @@ def predict_full(model, decoder, text, melody, duration, topk, topp, temperature
 
     videos, _ = _do_predictions(
         [text], [melody], duration, progress=True,
-        top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef)
+        top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
     if USE_DIFFUSION:
         return videos[0], None, videos[1], seed
     return videos[0], None, None, seed
@@ -656,7 +656,7 @@ def ui_full(launch_kwargs):
                             with gr.Column():
                                 input_type = gr.Radio(["file", "mic"], value="file", label="Input Type (optional)", interactive=True)
                                 mode = gr.Radio(["melody", "sample"], label="Input Audio Mode (optional)", value="sample", interactive=True)
-                            melody = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
+                            audio = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
 
                     with gr.Tab("Settings"):
                         with gr.Row():
@@ -675,7 +675,7 @@ def ui_full(launch_kwargs):
                         _ = gr.Button("Interrupt").click(fn=interrupt, queue=False)
                 with gr.Column() as c:
                     with gr.Tab("Output"):
-                        output = gr.Video(label="Generated Music")
+                        output = gr.Video(label="Generated Music", scale=0)
                         #audio_output = gr.Audio(label="Generated Music (wav)", type='filepath')
                         diffusion_output = gr.Video(label="MultiBand Diffusion Decoder")
                         audio_diffusion = gr.Audio(label="MultiBand Diffusion Decoder (wav)", type='filepath')
@@ -1021,10 +1021,10 @@ def ui_full(launch_kwargs):
 
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False,
-                     show_progress=False).then(predict_full, inputs=[model, decoder, text, melody, duration, topk, topp,
-                                                                     temperature, cfg_coef, seed],
+                     show_progress=False).then(predict_full, inputs=[model, decoder, text, audio, duration, topk, topp,
+                                                                     temperature, cfg_coef, seed, overlap],
                                                outputs=[output, diffusion_output, audio_diffusion, seed_used])
-        input_type.change(toggle_audio_src, input_type, [melody], queue=False, show_progress=False)
+        input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         interface.queue().launch(**launch_kwargs)
 
 
