@@ -398,6 +398,7 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
                 prompt_sample_rate=globalSR,
                 descriptions=texts,
                 progress=progress,
+                return_tokens=USE_DIFFUSION
             )
         else:
             if sampleP.dim() > 1:
@@ -408,6 +409,7 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
                 prompt_sample_rate=globalSR,
                 descriptions=texts,
                 progress=progress,
+                return_tokens=USE_DIFFUSION
             )
             outputs = torch.cat([sampleP, outputs], 2)
             
