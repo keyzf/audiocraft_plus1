@@ -554,7 +554,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, melody, duration, topk, topp, temperature, cfg_coef, progress=gr.Progress()):
+def predict_full(model, decoder, text, melody, duration, topk, topp, temperature, cfg_coef, seed, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -573,8 +573,15 @@ def predict_full(model, decoder, text, melody, duration, topk, topp, temperature
         USE_DIFFUSION = False
     load_model(model)
 
+    if seed < 0:
+        seed = random.randint(0, 0xffff_ffff_ffff)
+    torch.manual_seed(seed)
+    predict_full.last_upd = time.monotonic()
+
     def _progress(generated, to_generate):
-        progress((min(generated, to_generate), to_generate))
+        if time.monotonic() - predict_full.last_upd > 1:
+            progress((generated, to_generate))
+            predict_full.last_upd = time.monotonic()
         if INTERRUPTING:
             raise gr.Error("Interrupted.")
     MODEL.set_custom_progress_callback(_progress)
@@ -583,8 +590,8 @@ def predict_full(model, decoder, text, melody, duration, topk, topp, temperature
         [text], [melody], duration, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef)
     if USE_DIFFUSION:
-        return videos[0], None, videos[1], None
-    return videos[0], None, None, None
+        return videos[0], None, videos[1], None, seed
+    return videos[0], None, None, None, seed
 
 
 max_textboxes = 10
@@ -636,6 +643,12 @@ def ui_full(launch_kwargs):
                             text = gr.Text(label="Input Text", interactive=True)
                         with gr.Row():
                             duration = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
+                        with gr.Row():
+                            overlap = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
+                        with gr.Row():
+                            seed = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
+                            gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed], queue=False)
+                            reuse_seed = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
 
                     with gr.Tab("Audio"):
                         with gr.Row():
@@ -665,6 +678,7 @@ def ui_full(launch_kwargs):
                         #audio_output = gr.Audio(label="Generated Music (wav)", type='filepath')
                         diffusion_output = gr.Video(label="MultiBand Diffusion Decoder")
                         audio_diffusion = gr.Audio(label="MultiBand Diffusion Decoder (wav)", type='filepath')
+                        seed_used = gr.Number(label='Seed used', value=-1, interactive=False)
                     with gr.Tab("Wiki"):
                         gr.Markdown(
                             """
@@ -996,10 +1010,18 @@ def ui_full(launch_kwargs):
                             #### AlexHK - https://github.com/alanhk147
                             """
                         )
-        
+        with gr.Tab("Audio Info"):
+            with gr.Row():
+                with gr.Column():
+                    in_audio = gr.File(source="upload", type="file", label="Input Any Audio", interactive=True)
+                    send_gen = gr.Button("Send to Text2Audio", variant="primary")
+                with gr.Column():
+                    info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
+
+        reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False,
                      show_progress=False).then(predict_full, inputs=[model, decoder, text, melody, duration, topk, topp,
-                                                                     temperature, cfg_coef],
+                                                                     temperature, cfg_coef, seed],
                                                outputs=[output, diffusion_output, audio_diffusion])
         input_type.change(toggle_audio_src, input_type, [melody], queue=False, show_progress=False)
         interface.queue().launch(**launch_kwargs)
