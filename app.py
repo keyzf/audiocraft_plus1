@@ -402,8 +402,8 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         MODEL.to('cpu')
     if UNLOAD_MODEL:
         MODEL = None
-    torch.cuda.empty_cache()
-    torch.cuda.ipc_collect()
+    #torch.cuda.empty_cache()
+    #torch.cuda.ipc_collect()
     return res, res_audio, res_backup, input_length
 
 
