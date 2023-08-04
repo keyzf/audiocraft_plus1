@@ -98,7 +98,7 @@ def make_waveform(*args, **kwargs):
         return out
 
 
-def load_model(version='facebook/musicgen-melody'):
+def load_model(version='melody'):
     global MODEL
     print("Loading model", version)
     if MODEL is None or MODEL.name != version:
@@ -166,7 +166,7 @@ def _do_predictions(texts, melodies, duration, progress=False, **gen_kwargs):
 def predict_batched(texts, melodies):
     max_text_length = 512
     texts = [text[:max_text_length] for text in texts]
-    load_model('facebook/musicgen-melody')
+    load_model('melody')
     res = _do_predictions(texts, melodies, BATCHED_DURATION)
     return res
 
@@ -242,9 +242,6 @@ def ui_full(launch_kwargs):
                                     scale = gr.Dropdown(["Major", "Minor"], label="Scale", value="Major", interactive=True)
                                 with gr.Row():
                                     global_prompt = gr.Text(label="Global Prompt", interactive=True, scale=3)
-                        with gr.Row():
-                            s = gr.Slider(1, max_textboxes, value=1, step=1, label="Prompts:", interactive=True, scale=2)
-                            #s_mode = gr.Radio(["segmentation", "batch"], value="segmentation", interactive=True, scale=1, label="Generation Mode")
                         with gr.Column():
                             text = gr.Text(label="Input Text", interactive=True)
                         with gr.Row():
@@ -255,11 +252,11 @@ def ui_full(launch_kwargs):
                             with gr.Column():
                                 input_type = gr.Radio(["file", "mic"], value="file", label="Input Type (optional)", interactive=True)
                                 mode = gr.Radio(["melody", "sample"], label="Input Audio Mode (optional)", value="sample", interactive=True)
-                            audio = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
+                            melody = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
 
                     with gr.Tab("Settings"):
                         with gr.Row():
-                            model = gr.Radio(["facebook/musicgen-melody", "facebook/musicgen-small", "facebook/musicgen-medium", "facebook/musicgen-large", "custom"], label="Model", value="facebook/musicgen-large", interactive=True, scale=1)
+                            model = gr.Radio(["melody", "small", "medium", "large", "custom"], label="Model", value="large", interactive=True, scale=1)
                         with gr.Row():
                             decoder = gr.Radio(["Default", "MultiBand_Diffusion"],
                                                label="Decoder", value="Default", interactive=True)
@@ -614,7 +611,7 @@ def ui_full(launch_kwargs):
                      show_progress=False).then(predict_full, inputs=[model, decoder, text, melody, duration, topk, topp,
                                                                      temperature, cfg_coef],
                                                outputs=[output, diffusion_output, audio_diffusion])
-        radio.change(toggle_audio_src, radio, [melody], queue=False, show_progress=False)
+        input_type.change(toggle_audio_src, input_type, [melody], queue=False, show_progress=False)
         interface.queue().launch(**launch_kwargs)
 
 

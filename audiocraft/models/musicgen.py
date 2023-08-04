@@ -29,10 +29,10 @@ MelodyType = tp.Union[torch.Tensor, MelodyList]
 
 # backward compatible names mapping
 _HF_MODEL_CHECKPOINTS_MAP = {
-    "small": "facebook/musicgen-small",
-    "medium": "facebook/musicgen-medium",
-    "large": "facebook/musicgen-large",
-    "melody": "facebook/musicgen-melody",
+    "small": "GrandaddyShmax/musicgen-small",
+    "medium": "GrandaddyShmax/musicgen-medium",
+    "large": "GrandaddyShmax/musicgen-large",
+    "melody": "GrandaddyShmax/musicgen-melody",
 }
 
 
@@ -85,7 +85,7 @@ class MusicGen:
         return self.compression_model.channels
 
     @staticmethod
-    def get_pretrained(name: str = 'facebook/musicgen-melody', device=None):
+    def get_pretrained(name: str = 'melody', device=None):
         """Return pretrained model, we provide four models:
         - facebook/musicgen-small (300M), text to music,
           # see: https://huggingface.co/facebook/musicgen-small
@@ -107,12 +107,6 @@ class MusicGen:
             compression_model = get_debug_compression_model(device)
             lm = get_debug_lm_model(device)
             return MusicGen(name, compression_model, lm, max_duration=30)
-
-        if name in _HF_MODEL_CHECKPOINTS_MAP:
-            warnings.warn(
-                "MusicGen pretrained model relying on deprecated checkpoint mapping. " +
-                f"Please use full pre-trained id instead: facebook/musicgen-{name}")
-            name = _HF_MODEL_CHECKPOINTS_MAP[name]
 
         lm = load_lm_model(name, device=device)
         compression_model = load_compression_model(name, device=device)
