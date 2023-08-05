@@ -32,7 +32,7 @@ import typing as tp
 
 from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
-from audiocraft.models import MusicGen, MultiBandDiffusion
+from audiocraft.models import AudioGen, MusicGen, MultiBandDiffusion
 from audiocraft.utils import ui
 import random, string
 
@@ -144,18 +144,21 @@ def make_waveform(*args, **kwargs):
         return out
 
 
-def load_model(version='melody', custom_model=None, base_model='medium'):
+def load_model(version='GrandaddyShmax/musicgen-melody', custom_model=None, base_model='GrandaddyShmax/musicgen-medium', gen_type="music"):
     global MODEL, MODELS
     print("Loading model", version)
-    version = "GrandaddyShmax/musicgen-" + version
-    base_model = "GrandaddyShmax/musicgen-" + base_model
+    #version = "GrandaddyShmax/musicgen-" + version
+    #base_model = "GrandaddyShmax/musicgen-" + base_model
     if MODELS is None:
         if version == 'GrandaddyShmax/musicgen-custom':
             MODEL = MusicGen.get_pretrained(base_model)
             file_path = os.path.abspath("models/" + str(custom_model) + ".pt")
             MODEL.lm.load_state_dict(torch.load(file_path))
         else:
-            MODEL = MusicGen.get_pretrained(version)
+            if gen_type == "music":
+                MODEL = MusicGen.get_pretrained(version)
+            elif gen_type == "audio":
+                MODEL = AudioGen.get_pretrained(version)
 
         return
     else:
@@ -166,7 +169,10 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
             t1 = time.monotonic()
         if version != 'GrandaddyShmax/musicgen-custom' and MODELS.get(version) is None:
             print("Loading model %s from disk" % version)
-            result = MusicGen.get_pretrained(version)
+            if gen_type == "music":
+                result = MusicGen.get_pretrained(version)
+            elif gen_type == "audio":
+                result = AudioGen.get_pretrained(version)
             MODELS[version] = result
             print("Model loaded in %.2fs" % (time.monotonic() - t1))
             MODEL = result
@@ -473,7 +479,7 @@ def unload_diffusion():
         MBD = None
 
 
-def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
+def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     maximum_size = 29.5
     cut_size = 0
     input_length = 0
@@ -522,36 +528,63 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
     
     if sample is not None:
         if sampleP is None:
-            outputs = MODEL.generate_continuation(
-                prompt=sampleM,
-                prompt_sample_rate=globalSR,
-                descriptions=texts,
-                progress=progress,
-                return_tokens=USE_DIFFUSION
-            )
+            if gen_type == "music":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress,
+                    return_tokens=USE_DIFFUSION
+                )
+            elif gen_type == "audio":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress
+                )
         else:
             if sampleP.dim() > 1:
                 sampleP = convert_audio(sampleP, globalSR, target_sr, target_ac)
             sampleP = sampleP.to(MODEL.device).float().unsqueeze(0)
-            outputs = MODEL.generate_continuation(
-                prompt=sampleM,
-                prompt_sample_rate=globalSR,
-                descriptions=texts,
-                progress=progress,
-                return_tokens=USE_DIFFUSION
-            )
+            if gen_type == "music":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress,
+                    return_tokens=USE_DIFFUSION
+                )
+            elif gen_type == "audio":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress
+                )
             outputs = torch.cat([sampleP, outputs], 2)
             
     elif any(m is not None for m in processed_melodies):
-        outputs = MODEL.generate_with_chroma(
-            descriptions=texts,
-            melody_wavs=processed_melodies,
-            melody_sample_rate=target_sr,
-            progress=progress,
-            return_tokens=USE_DIFFUSION
-        )
+        if gen_type == "music":
+            outputs = MODEL.generate_with_chroma(
+                descriptions=texts,
+                melody_wavs=processed_melodies,
+                melody_sample_rate=target_sr,
+                progress=progress,
+                return_tokens=USE_DIFFUSION
+            )
+        elif gen_type == "audio":
+            outputs = MODEL.generate_with_chroma(
+                descriptions=texts,
+                melody_wavs=processed_melodies,
+                melody_sample_rate=target_sr,
+                progress=progress
+            )
     else:
-        outputs = MODEL.generate(texts, progress=progress, return_tokens=USE_DIFFUSION)
+        if gen_type == "music":
+            outputs = MODEL.generate(texts, progress=progress, return_tokens=USE_DIFFUSION)
+        elif gen_type == "audio":
+            outputs = MODEL.generate(texts, progress=progress)
 
     if USE_DIFFUSION:
         outputs_diffusion = MBD.tokens_to_wav(outputs[1])
@@ -811,9 +844,10 @@ def predict_full(gen_type, model, decoder, custom_model, base_model, prompt_amou
         model = "GrandaddyShmax/musicgen-" + model
     elif gen_type == "audio":
         model = "GrandaddyShmax/audiogen-" + model
+    base_model = "GrandaddyShmax/musicgen-" + base_model
     
     if MODEL is None or MODEL.name != (model):
-        load_model(model, custom_model, base_model)
+        load_model(model, custom_model, base_model, gen_type)
     else:
         if MOVE_TO_CPU:
             MODEL.to('cuda')
@@ -875,7 +909,7 @@ def predict_full(gen_type, model, decoder, custom_model, base_model, prompt_amou
         ind = ind + 1
 
     outs, outs_audio, outs_backup, input_length = _do_predictions(
-        [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
+        gen_type, [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
     tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(custom_model), str(base_model), str(decoder), str(topk), str(topp), str(temperature), str(cfg_coef), str(gen_type)]
     wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags);
@@ -908,12 +942,17 @@ def ui_full(launch_kwargs):
             """
             # Audiocraft Plus - v2.0.0
 
-            ## An All-in-One Audiocraft WebUI
+            ### An All-in-One Audiocraft WebUI
 
             Thanks to: facebookresearch, Camenduru, rkfg, oobabooga, AlexHK and GrandaddyShmax
             """
         )
         with gr.Tab("MusicGen"):
+            gr.Markdown(
+                """
+                ### MusicGen
+                """
+            )
             with gr.Row():
                 with gr.Column():
                     with gr.Tab("Generation"):
@@ -1175,6 +1214,11 @@ def ui_full(launch_kwargs):
                             """
                         )
         with gr.Tab("AudioGen"):
+            gr.Markdown(
+                """
+                ### AudioGen
+                """
+            )
             with gr.Row():
                 with gr.Column():
                     with gr.Tab("Generation"):
@@ -1241,7 +1285,7 @@ def ui_full(launch_kwargs):
                             channel_a = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
                             sr_select_a = gr.Dropdown(["11025", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                         with gr.Row():
-                            model_a = "medium"
+                            model_a = gr.Text(value="medium", interactive=False, visible=False)
                             decoder_a = gr.Radio(["Default", "MultiBand_Diffusion"], label="Decoder", value="Default", interactive=True)
                         with gr.Row():
                             topk_a = gr.Number(label="Top-k", value=250, interactive=True)
@@ -1392,6 +1436,11 @@ def ui_full(launch_kwargs):
                             """
                         )
         with gr.Tab("Audio Info"):
+            gr.Markdown(
+                """
+                ### Audio Info
+                """
+            )
             with gr.Row():
                 with gr.Column():
                     in_audio = gr.File(source="upload", type="file", label="Input Any Audio", interactive=True)
@@ -1405,27 +1454,31 @@ def ui_full(launch_kwargs):
                             """
                             ## Changelog:
 
-                            ### V2.0.0
+                            ### v2.0.0
 
+                            - Changed name from MusicGen+ to Audiocraft Plus
+                            
                             - Complete overhaul of the repo "backend" with the latest changes from the main facebookresearch repo
 
                             - Added a new decoder: MultiBand_Diffusion
 
+                            - Added AudioGen: a new tab for generating audio
 
 
-                            ### V1.2.8c
+
+                            ### v1.2.8c
 
                             - Implemented Reverse compatibility for audio info tab with previous versions
 
 
 
-                            ### V1.2.8b
+                            ### v1.2.8b
 
                             - Fixed the error when loading default models
 
 
 
-                            ### V1.2.8a
+                            ### v1.2.8a
 
                             - Adapted Audio info tab to work with the new structure prompts feature
 
@@ -1433,7 +1486,7 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.8
+                            ### v1.2.8
 
                             - Now you will also recieve json file with metadata of generated audio
 
@@ -1445,7 +1498,7 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.7
+                            ### v1.2.7
 
                             - When sending generated audio to Input Audio, it will send a backup audio with default settings  
                             (best for continuos generation)
@@ -1464,7 +1517,7 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.6
+                            ### v1.2.6
 
                             - Added option to generate in stereo (instead of only mono)
 
@@ -1472,7 +1525,7 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.5a
+                            ### v1.2.5a
 
                             - Added file cleaner (This comes from the main facebookresearch repo)
 
@@ -1480,7 +1533,7 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.5
+                            ### v1.2.5
 
                             - Gave a unique lime theme to the webui
                             
@@ -1492,25 +1545,25 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.4
+                            ### v1.2.4
 
                             - Added mic input (This comes from the main facebookresearch repo)
 
 
 
-                            ### V1.2.3
+                            ### v1.2.3
 
                             - Added option to change video size to fit the image you upload
 
 
 
-                            ### V1.2.2
+                            ### v1.2.2
 
                             - Added Wiki, Changelog and About tabs
 
 
 
-                            ### V1.2.1
+                            ### v1.2.1
 
                             - Added tabs and organized the entire interface
 
@@ -1520,31 +1573,31 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.2.0
+                            ### v1.2.0
 
                             - Added Multi-Prompt
 
 
 
-                            ### V1.1.3
+                            ### v1.1.3
 
                             - Added customization options for generated waveform
 
 
 
-                            ### V1.1.2
+                            ### v1.1.2
 
                             - Removed sample length limit: now you can input audio of any length as music sample
 
 
 
-                            ### V1.1.1
+                            ### v1.1.1
 
                             - Improved music sample audio quality when using music continuation
 
 
 
-                            ### V1.1.0
+                            ### v1.1.0
 
                             - Rebuilt the repo on top of the latest structure of the main MusicGen repo
                             
@@ -1552,7 +1605,7 @@ def ui_full(launch_kwargs):
 
 
 
-                            ### V1.0.0 - Stable Version
+                            ### v1.0.0 - Stable Version
 
                             - Added Music continuation
                             """
