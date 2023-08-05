@@ -648,10 +648,11 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_coef, seed, progress=gr.Progress()):
+def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_coef, seed, overlap, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
+
     if temperature < 0:
         raise gr.Error("Temperature must be >= 0.")
     if topk < 0:
@@ -679,7 +680,7 @@ def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_co
 
     videos, wavs, outs_backup = _do_predictions(
         [text], duration, progress=True,
-        top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef)
+        top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
 
     return videos[0], wavs[0], outs_backup[0], [videos[0], wavs[0], outs_backup[0]], seed
 
@@ -988,8 +989,8 @@ def ui_full(launch_kwargs):
                             text_a = gr.Text(label="Input Text", interactive=True)
                         with gr.Row():
                             duration_a = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
-                        #with gr.Row():
-                            #overlap_a = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
+                        with gr.Row():
+                            overlap_a = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
                         with gr.Row():
                             seed_a = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
                             gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
@@ -1361,7 +1362,7 @@ def ui_full(launch_kwargs):
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
         reuse_seed_a.click(fn=lambda x: x, inputs=[seed_used_a], outputs=[seed_a], queue=False)
-        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
+        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
