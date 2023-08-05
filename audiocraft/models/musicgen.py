@@ -55,6 +55,7 @@ class MusicGen:
         if max_duration is None:
             if hasattr(lm, 'cfg'):
                 max_duration = lm.cfg.dataset.segment_duration  # type: ignore
+                print("max_duration: ", str(max_duration))
             else:
                 raise ValueError("You must provide max_duration when building directly MusicGen")
         assert max_duration is not None

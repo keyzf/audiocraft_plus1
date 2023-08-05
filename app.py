@@ -48,6 +48,8 @@ theme = gr.themes.Base(
 )
 
 MODEL = None  # Last used model
+MODELS = None
+MOVE_TO_CPU = False
 IS_BATCHED = "facebook/MusicGen" in os.environ.get('SPACE_ID', '')
 print(IS_BATCHED)
 MAX_BATCH_SIZE = 12
@@ -139,11 +141,27 @@ def make_waveform(*args, **kwargs):
 
 
 def load_model(version='melody'):
-    global MODEL
+    global MODEL, MODELS
     print("Loading model", version)
     version = "GrandaddyShmax/musicgen-" + version
-    if MODEL is None or MODEL.name != version:
+    if MODELS is None:
         MODEL = MusicGen.get_pretrained(version)
+    else:
+        t1 = time.monotonic()
+        if MODEL is not None:
+            MODEL.to('cpu') # move to cache
+            print("Previous model moved to CPU in %.2fs" % (time.monotonic() - t1))
+            t1 = time.monotonic()
+        if MODELS.get(version) is None:
+            print("Loading model %s from disk" % version)
+            result = MusicGen.get_pretrained(version)
+            MODELS[version] = result
+            print("Model loaded in %.2fs" % (time.monotonic() - t1))
+            MODEL = result
+            return
+        result = MODELS[version].to('cude')
+        print("Cached model loaded in %.2fs" % (time.monotonic() - t1))
+        MODEL = result
 
 def get_audio_info(audio_path):
     if audio_path is not None:
@@ -637,12 +655,18 @@ def predict_full(model, decoder, text, audio, mode, trim_start, trim_end, durati
         trim_end = 0
 
     topk = int(topk)
+
     if decoder == "MultiBand_Diffusion":
         USE_DIFFUSION = True
         load_diffusion()
     else:
         USE_DIFFUSION = False
-    load_model(model)
+
+    if MODEL is None or MODEL.name != model:
+        load_model(model)
+    else:
+        if MOVE_TO_CPU:
+            MODEL.to('cuda')
 
     if seed < 0:
         seed = random.randint(0, 0xffff_ffff_ffff)
@@ -757,8 +781,7 @@ def ui_full(launch_kwargs):
                         with gr.Row():
                             model = gr.Radio(["melody", "small", "medium", "large", "custom"], label="Model", value="large", interactive=True, scale=1)
                         with gr.Row():
-                            decoder = gr.Radio(["Default", "MultiBand_Diffusion"],
-                                               label="Decoder", value="Default", interactive=True)
+                            decoder = gr.Radio(["Default", "MultiBand_Diffusion"], label="Decoder", value="Default", interactive=True)
                         with gr.Row():
                             topk = gr.Number(label="Top-k", value=250, interactive=True)
                             topp = gr.Number(label="Top-p", value=0, interactive=True)
@@ -1239,8 +1262,23 @@ if __name__ == "__main__":
     parser.add_argument(
         '--share', action='store_true', help='Share the gradio UI'
     )
+    parser.add_argument(
+        '--unload_model', action='store_true', help='Unload the model after every generation to save GPU memory'
+    )
+
+    parser.add_argument(
+        '--unload_to_cpu', action='store_true', help='Move the model to main RAM after every generation to save GPU memory but reload faster than after full unload (see above)'
+    )
+
+    parser.add_argument(
+        '--cache', action='store_true', help='Cache models in RAM to quickly switch between them'
+    )
 
     args = parser.parse_args()
+    UNLOAD_MODEL = args.unload_model
+    MOVE_TO_CPU = args.unload_to_cpu
+    if args.cache:
+        MODELS = {}
 
     launch_kwargs = {}
     launch_kwargs['server_name'] = args.listen
