@@ -33,6 +33,7 @@ import typing as tp
 from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import MusicGen, MultiBandDiffusion
+from audiocraft.utils import ui
 import random, string
 
 version = "2.0.0"
