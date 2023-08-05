@@ -151,9 +151,7 @@ class MusicGen:
         """Override the default progress callback."""
         self._progress_callback = progress_callback
 
-    def generate_unconditional(self, num_samples: int, progress: bool = False,
-                               return_tokens: bool = False) -> tp.Union[torch.Tensor,
-                                                                        tp.Tuple[torch.Tensor, torch.Tensor]]:
+    def generate_unconditional(self, num_samples: int, progress: bool = False, return_tokens: bool = False) -> tp.Union[torch.Tensor, tp.Tuple[torch.Tensor, torch.Tensor]]:
         """Generate samples in an unconditional manner.
 
         Args:
@@ -182,10 +180,7 @@ class MusicGen:
             return self.generate_audio(tokens), tokens
         return self.generate_audio(tokens)
 
-    def generate_with_chroma(self, descriptions: tp.List[str], melody_wavs: MelodyType,
-                             melody_sample_rate: int, progress: bool = False,
-                             return_tokens: bool = False) -> tp.Union[torch.Tensor,
-                                                                      tp.Tuple[torch.Tensor, torch.Tensor]]:
+    def generate_with_chroma(self, descriptions: tp.List[str], melody_wavs: MelodyType, melody_sample_rate: int, progress: bool = False, return_tokens: bool = False) -> tp.Union[torch.Tensor, tp.Tuple[torch.Tensor, torch.Tensor]]:
         """Generate samples conditioned on text and melody.
 
         Args:
@@ -316,6 +311,8 @@ class MusicGen:
         Returns:
             torch.Tensor: Generated audio, of shape [B, C, T], T is defined by the generation params.
         """
+        i = 0
+        prompt_list = attributes[0].text['description']
         total_gen_len = int(self.duration * self.frame_rate)
         max_prompt_len = int(min(self.duration, self.max_duration) * self.frame_rate)
         current_gen_offset: int = 0
@@ -340,6 +337,7 @@ class MusicGen:
         if self.duration <= self.max_duration:
             # generate by sampling from LM, simple case.
             with self.autocast:
+                attributes[0].text['description'] = prompt_list[0]
                 gen_tokens = self.lm.generate(
                     prompt_tokens, attributes,
                     callback=callback, max_gen_len=total_gen_len, **self.generation_params)
@@ -378,9 +376,13 @@ class MusicGen:
                         [self.sample_rate] * ref_wav[0].size(0),
                         [None], [0.])
                 with self.autocast:
+                    if i >= len(prompt_list):
+                        i = len(prompt_list) - 1
+                    attributes[0].text['description'] = prompt_list[i]
                     gen_tokens = self.lm.generate(
                         prompt_tokens, attributes,
                         callback=callback, max_gen_len=max_gen_len, **self.generation_params)
+                    i = i + 1
                 if prompt_tokens is None:
                     all_tokens.append(gen_tokens)
                 else:
@@ -398,3 +400,8 @@ class MusicGen:
         with torch.no_grad():
             gen_audio = self.compression_model.decode(gen_tokens, None)
         return gen_audio
+
+    def to(self, device: str):
+        self.compression_model.to(device)
+        self.lm.to(device)
+        return self

@@ -17,6 +17,7 @@ import time
 import warnings
 import glob
 import re
+from PIL import Image
 from pydub import AudioSegment
 from datetime import datetime
 
@@ -367,6 +368,13 @@ def load_diffusion():
         MBD = MultiBandDiffusion.get_mbd_musicgen()
 
 
+def unload_diffusion():
+    global MBD
+    if MBD is not None:
+        print("unloading MBD")
+        MBD = None
+
+
 def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, progress=False, **gen_kwargs):
     maximum_size = 29.5
     cut_size = 0
@@ -649,7 +657,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, progress=gr.Progress()):
+def predict_full(model, decoder, prompt_amount, struc_prompt, bpm, key, scale, global_prompt, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -672,6 +680,7 @@ def predict_full(model, decoder, text, audio, mode, trim_start, trim_end, durati
         load_diffusion()
     else:
         USE_DIFFUSION = False
+        unload_diffusion()
 
     if MODEL is None or MODEL.name != ("GrandaddyShmax/musicgen-" + model):
         load_model(model)
@@ -702,11 +711,38 @@ def predict_full(model, decoder, text, audio, mode, trim_start, trim_end, durati
       elif mode == "melody":
           melody = audio
 
+    text_cat = [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9]
+    drag_cat = [d0, d1, d2, d3, d4, d5, d6, d7, d8, d9]
+    texts = []
+    raw_texts = []
+    ind = 0
+    ind2 = 0
+    while ind < prompt_amount:
+        for ind2 in range(int(drag_cat[ind])):
+            if not struc_prompt:
+                texts.append(text_cat[ind])
+                global_prompt = "none"
+                bpm = "none"
+                key = "none"
+                scale = "none"
+                raw_texts.append(text_cat[ind])
+            else:
+                bpm_str = str(bpm) + " bpm"
+                key_str = ", " + str(key) + " " + str(scale)
+                global_str = (", " + str(global_prompt)) if str(global_prompt) != "" else ""
+                texts_str = (", " + str(text_cat[ind])) if str(text_cat[ind]) != "" else ""
+                texts.append(bpm_str + key_str + global_str + texts_str)
+                raw_texts.append(text_cat[ind])
+        ind2 = 0
+        ind = ind + 1
+
     videos, _ = _do_predictions(
-        [text], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, progress=True,
+        [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
+
     if USE_DIFFUSION:
         return videos[0], None, videos[1], seed
+
     return videos[0], None, None, seed
 
 
@@ -755,8 +791,31 @@ def ui_full(launch_kwargs):
                                     scale = gr.Dropdown(["Major", "Minor"], label="Scale", value="Major", interactive=True)
                                 with gr.Row():
                                     global_prompt = gr.Text(label="Global Prompt", interactive=True, scale=3)
+                        with gr.Row():
+                            s = gr.Slider(1, max_textboxes, value=1, step=1, label="Prompts:", interactive=True, scale=2)
+                            #s_mode = gr.Radio(["segmentation", "batch"], value="segmentation", interactive=True, scale=1, label="Generation Mode")
                         with gr.Column():
-                            text = gr.Text(label="Input Text", interactive=True)
+                            textboxes = []
+                            prompts = []
+                            repeats = []
+                            calcs = []
+                            with gr.Row():
+                                text0 = gr.Text(label="Input Text", interactive=True, scale=4)
+                                prompts.append(text0)
+                                drag0 = gr.Number(label="Repeat", value=1, interactive=True, scale=1)
+                                repeats.append(drag0)
+                                calc0 = gr.Text(interactive=False, value="00:00 - 00:00", scale=1, label="Time")
+                                calcs.append(calc0)
+                            for i in range(max_textboxes):
+                                with gr.Row(visible=False) as t:
+                                    text = gr.Text(label="Input Text", interactive=True, scale=3)
+                                    repeat = gr.Number(label="Repeat", minimum=1, value=1, interactive=True, scale=1)
+                                    calc = gr.Text(interactive=False, value="00:00 - 00:00", scale=1, label="Time")
+                                textboxes.append(t)
+                                prompts.append(text)
+                                repeats.append(repeat)
+                                calcs.append(calc)
+                            to_calc = gr.Button("Calculate Timings", variant="secondary")
                         with gr.Row():
                             duration = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
                         with gr.Row():
@@ -1149,9 +1208,13 @@ def ui_full(launch_kwargs):
                     info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
 
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
-        submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False, show_progress=False).then(predict_full, inputs=[model, decoder, text, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2], outputs=[output, diffusion_output, audio_diffusion, seed_used])
+        submit.click(toggle_diffusion, decoder, [diffusion_output, audio_diffusion], queue=False, show_progress=False).then(predict_full, inputs=[model, decoder, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2], outputs=[output, diffusion_output, audio_diffusion, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
+        to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
+        def variable_outputs(k):
+            k = int(k) - 1
+            return [gr.Textbox.update(visible=True)]*k + [gr.Textbox.update(visible=False)]*(max_textboxes-k)
         def get_size(image):
             if image is not None:
                 img = Image.open(image)
@@ -1166,6 +1229,7 @@ def ui_full(launch_kwargs):
                 return 512, 768
 
         image.change(get_size, image, outputs=[height, width])
+        s.change(variable_outputs, s, textboxes)
         interface.queue().launch(**launch_kwargs)
 
 
