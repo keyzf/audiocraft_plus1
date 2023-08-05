@@ -648,7 +648,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_coef, progress=gr.Progress()):
+def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_coef, seed, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -667,6 +667,10 @@ def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_co
         USE_DIFFUSION = False
     load_model(model)
 
+    if seed < 0:
+        seed = random.randint(0, 0xffff_ffff_ffff)
+    torch.manual_seed(seed)
+
     def _progress(generated, to_generate):
         progress((min(generated, to_generate), to_generate))
         if INTERRUPTING:
@@ -677,7 +681,7 @@ def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_co
         [text], duration, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef)
 
-    return videos[0], wavs[0], outs_backup[0]
+    return videos[0], wavs[0], outs_backup[0], [videos[0], wavs[0], outs_backup[0]], seed
 
 
 max_textboxes = 10
@@ -986,10 +990,10 @@ def ui_full(launch_kwargs):
                             duration_a = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
                         #with gr.Row():
                             #overlap_a = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
-                        #with gr.Row():
-                            #seed_a = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
-                            #gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
-                            #reuse_seed_a = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
+                        with gr.Row():
+                            seed_a = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
+                            gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
+                            reuse_seed_a = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
 
                     with gr.Tab("Settings"):
                         #with gr.Row():
@@ -1011,11 +1015,10 @@ def ui_full(launch_kwargs):
                         output_a = gr.Video(label="Generated Audio", scale=0)
                         with gr.Row():
                             audio_only_a = gr.Audio(type="numpy", label="Audio Only", interactive=False)
-                            #audio_only_a = gr.Audio(label="Generated Audio (wav)", type='filepath')
                             backup_only_a = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=False)
                             #send_audio_a = gr.Button("Send to Input Audio")
-                        #seed_used_a = gr.Number(label='Seed used', value=-1, interactive=False)
-                        #download_a = gr.File(label="Generated Files", interactive=False)
+                        seed_used_a = gr.Number(label='Seed used', value=-1, interactive=False)
+                        download_a = gr.File(label="Generated Files", interactive=False)
                     with gr.Tab("Wiki"):
                         gr.Markdown(
                             """
@@ -1357,7 +1360,8 @@ def ui_full(launch_kwargs):
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
-        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a], outputs=[output_a, audio_only_a, backup_only_a])
+        reuse_seed_a.click(fn=lambda x: x, inputs=[seed_used_a], outputs=[seed_a], queue=False)
+        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
