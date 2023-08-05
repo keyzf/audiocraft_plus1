@@ -802,7 +802,7 @@ def ui_full(launch_kwargs):
     with gr.Blocks(title='Audiocraft Plus', theme=theme) as interface:
         gr.Markdown(
             """
-            # Audiocraft Plus V2.0.0
+            # Audiocraft Plus - v2.0.0
 
             ## An All-in-One Audiocraft WebUI
 
@@ -1052,6 +1052,11 @@ def ui_full(launch_kwargs):
                             - **[Base Model (selection)]:**  
                             Choose here the model that your custom model is based on.
 
+                            - **[Decoder (selection)]:**  
+                            Choose here the decoder that you wish to use:  
+                            `Default` is the default decoder  
+                            `MultiBand_Diffusion` is a decoder that uses diffusion to generate the audio.
+
                             - **[Top-k (number)]:**  
                             is a parameter used in text generation models, including music generation models. It determines the number of most likely next tokens to consider at each step of the generation process. The model ranks all possible tokens based on their predicted probabilities, and then selects the top-k tokens from the ranked list. The model then samples from this reduced set of tokens to determine the next token in the generated sequence. A smaller value of k results in a more focused and deterministic output, while a larger value of k allows for more diversity in the generated music.
 
@@ -1069,6 +1074,14 @@ def ui_full(launch_kwargs):
                         gr.Markdown(
                             """
                             ## Changelog:
+
+                            ### V2.0.0
+
+                            - Complete overhaul of the repo "backend" with the latest changes from the main facebookresearch repo
+
+                            - Added a new decoder: MultiBand_Diffusion
+
+
 
                             ### V1.2.8c
 
