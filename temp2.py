@@ -990,7 +990,7 @@ def ui_full(launch_kwargs):
                         with gr.Row():
                             duration_a = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
                         with gr.Row():
-                            overlap_a = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
+                            overlap_a = gr.Slider(minimum=1, maximum=9, value=2, step=1, label="Overlap", interactive=True)
                         with gr.Row():
                             seed_a = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
                             gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
