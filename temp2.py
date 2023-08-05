@@ -466,6 +466,7 @@ def _do_predictions(texts, duration, progress=False, **gen_kwargs):
             out_backup.append(file.name)
             file_cleaner.add(file.name)
     out_videos = [pending_video.result() for pending_video in pending_videos]
+    res_backup = out_backup
     for video in out_videos:
         file_cleaner.add(video)
     print("batch finished", len(texts), time.time() - be)
@@ -983,19 +984,19 @@ def ui_full(launch_kwargs):
                             text_a = gr.Text(label="Input Text", interactive=True)
                         with gr.Row():
                             duration_a = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
-                        with gr.Row():
+                        #with gr.Row():
                             #overlap_a = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
-                        with gr.Row():
+                        #with gr.Row():
                             #seed_a = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
                             #gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
                             #reuse_seed_a = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
 
                     with gr.Tab("Settings"):
-                        with gr.Row():
+                        #with gr.Row():
                             #channel_a = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
                             #sr_select_a = gr.Dropdown(["11025", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                         with gr.Row():
-                            model_a = gr.Radio(["medium"], label="Model", value="medium", interactive=False, visible=False)
+                            model_a = gr.Radio(["facebook/audiogen-medium"], label="Model", value="facebook/audiogen-medium", interactive=False, visible=False)
                             decoder_a = gr.Radio(["Default", "MultiBand_Diffusion"], label="Decoder", value="Default", interactive=True)
                         with gr.Row():
                             topk_a = gr.Number(label="Top-k", value=250, interactive=True)
@@ -1356,7 +1357,7 @@ def ui_full(launch_kwargs):
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
-        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a], outputs=[output_a, audio_output_a, backup_only_a])
+        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a], outputs=[output_a, audio_only_a, backup_only_a])
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
