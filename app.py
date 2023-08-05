@@ -673,7 +673,7 @@ def predict_full(model, decoder, text, audio, mode, trim_start, trim_end, durati
     else:
         USE_DIFFUSION = False
 
-    if MODEL is None or MODEL.name != model:
+    if MODEL is None or MODEL.name != ("GrandaddyShmax/musicgen-" + model):
         load_model(model)
     else:
         if MOVE_TO_CPU:
