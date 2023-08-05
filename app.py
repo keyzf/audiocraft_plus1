@@ -150,7 +150,7 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
     version = "GrandaddyShmax/musicgen-" + version
     base_model = "GrandaddyShmax/musicgen-" + base_model
     if MODELS is None:
-        if version == 'custom':
+        if version == 'GrandaddyShmax/musicgen-custom':
             MODEL = MusicGen.get_pretrained(base_model)
             file_path = os.path.abspath("models/" + str(custom_model) + ".pt")
             MODEL.lm.load_state_dict(torch.load(file_path))
@@ -164,7 +164,7 @@ def load_model(version='melody', custom_model=None, base_model='medium'):
             MODEL.to('cpu') # move to cache
             print("Previous model moved to CPU in %.2fs" % (time.monotonic() - t1))
             t1 = time.monotonic()
-        if version != 'custom' and MODELS.get(version) is None:
+        if version != 'GrandaddyShmax/musicgen-custom' and MODELS.get(version) is None:
             print("Loading model %s from disk" % version)
             result = MusicGen.get_pretrained(version)
             MODELS[version] = result
