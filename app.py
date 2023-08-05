@@ -199,6 +199,7 @@ def get_audio_info(audio_path):
                     model = str("\nModel: " + data['model']) if 'model' in data else ""
                     custom_model = str("\nCustom Model: " + data['custom_model']) if 'custom_model' in data else ""
                     base_model = str("\nBase Model: " + data['base_model']) if 'base_model' in data else ""
+                    decoder = str("\nDecoder: " + data['decoder']) if 'decoder' in data else ""
                     topk = str("\nTopk: " + data['topk']) if 'topk' in data else ""
                     topp = str("\nTopp: " + data['topp']) if 'topp' in data else ""
                     temperature = str("\nTemperature: " + data['temperature']) if 'temperature' in data else ""
@@ -228,6 +229,7 @@ def get_audio_info(audio_path):
                     model = str("\nModel: " + data['model']) if 'model' in data else ""
                     custom_model = str("\nCustom Model: " + data['custom_model']) if 'custom_model' in data else ""
                     base_model = str("\nBase Model: " + data['base_model']) if 'base_model' in data else ""
+                    decoder = str("\nDecoder: " + data['decoder']) if 'decoder' in data else ""
                     topk = str("\nTopk: " + data['topk']) if 'topk' in data else ""
                     topp = str("\nTopp: " + data['topp']) if 'topp' in data else ""
                     temperature = str("\nTemperature: " + data['temperature']) if 'temperature' in data else ""
@@ -249,7 +251,7 @@ def info_to_params(audio_path):
             if not audio_path.name.endswith(".json"):
                 with taglib.File(audio_path.name, save_on_exit=False) as song:
                     if 'COMMENT' not in song.tags:
-                        return False, "", 120, "C", "Major", "large", None, "medium", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
+                        return "Default", False, "", 120, "C", "Major", "large", None, "medium", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
                     json_string = song.tags['COMMENT'][0]
                     data = json.loads(json_string)
                     struc_prompt = (False if data['bpm'] == "none" else True) if 'bpm' in data else False
@@ -260,6 +262,7 @@ def info_to_params(audio_path):
                     model = data['model'] if 'model' in data else "large"
                     custom_model = (data['custom_model'] if data['custom_model'] in get_available_models() else None) if 'custom_model' in data else None
                     base_model = data['base_model'] if 'base_model' in data else "medium"
+                    decoder = data['decoder'] if 'decoder' in data else "Default"
                     if 'texts' not in data:
                         unique_prompts = 1
                         text = ["", "", "", "", "", "", "", "", "", ""]
@@ -291,7 +294,7 @@ def info_to_params(audio_path):
                     overlap = int(data['overlap']) if 'overlap' in data else 12
                     channel = data['channel'] if 'channel' in data else "stereo"
                     sr_select = data['sr_select'] if 'sr_select' in data else "48000"
-                    return struc_prompt, global_prompt, bpm, key, scale, model, custom_model, base_model, unique_prompts, text[0], text[1], text[2], text[3], text[4], text[5], text[6], text[7], text[8], text[9], repeat[0], repeat[1], repeat[2], repeat[3], repeat[4], repeat[5], repeat[6], repeat[7], repeat[8], repeat[9], audio_mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select
+                    return decoder, struc_prompt, global_prompt, bpm, key, scale, model, custom_model, base_model, unique_prompts, text[0], text[1], text[2], text[3], text[4], text[5], text[6], text[7], text[8], text[9], repeat[0], repeat[1], repeat[2], repeat[3], repeat[4], repeat[5], repeat[6], repeat[7], repeat[8], repeat[9], audio_mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select
             else:
                 with open(audio_path.name) as json_file:
                     data = json.load(json_file)
@@ -305,6 +308,7 @@ def info_to_params(audio_path):
                     model = data['model'] if 'model' in data else "large"
                     custom_model = (data['custom_model'] if data['custom_model'] in get_available_models() else None) if 'custom_model' in data else None
                     base_model = data['base_model'] if 'base_model' in data else "medium"
+                    decoder = data['decoder'] if 'decoder' in data else "Default"
                     if 'texts' not in data:
                         unique_prompts = 1
                         text = ["", "", "", "", "", "", "", "", "", ""]
@@ -336,11 +340,11 @@ def info_to_params(audio_path):
                     overlap = int(data['overlap']) if 'overlap' in data else 12
                     channel = data['channel'] if 'channel' in data else "stereo"
                     sr_select = data['sr_select'] if 'sr_select' in data else "48000"
-                    return struc_prompt, global_prompt, bpm, key, scale, model, custom_model, base_model, unique_prompts, text[0], text[1], text[2], text[3], text[4], text[5], text[6], text[7], text[8], text[9], repeat[0], repeat[1], repeat[2], repeat[3], repeat[4], repeat[5], repeat[6], repeat[7], repeat[8], repeat[9], audio_mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select
+                    return decoder, struc_prompt, global_prompt, bpm, key, scale, model, custom_model, base_model, unique_prompts, text[0], text[1], text[2], text[3], text[4], text[5], text[6], text[7], text[8], text[9], repeat[0], repeat[1], repeat[2], repeat[3], repeat[4], repeat[5], repeat[6], repeat[7], repeat[8], repeat[9], audio_mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select
         else:
-            return False, "", 120, "C", "Major", "large", None, "medium", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
+            return "Default", False, "", 120, "C", "Major", "large", None, "medium", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
     else:
-        return False, "", 120, "C", "Major", "large", None, "medium", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
+        return "Default", False, "", 120, "C", "Major", "large", None, "medium", 1, "", "", "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, "sample", 10, 250, 0, 1.0, 5.0, -1, 12, "stereo", "48000"
 
 
 def make_pseudo_stereo (filename, sr_select, pan, delay):
@@ -538,10 +542,11 @@ def add_tags(filename, tags):
         "model": tags[12],
         "custom_model": tags[13],
         "base_model": tags[14],
-        "topk": tags[15],  
-        "topp": tags[16],
-        "temperature": tags[17],
-        "cfg_coef": tags[18],
+        "decoder": tags[15],
+        "topk": tags[16],  
+        "topp": tags[17],
+        "temperature": tags[18],
+        "cfg_coef": tags[19],
         "version": version
         }
 
@@ -768,7 +773,7 @@ def predict_full(model, decoder, custom_model, base_model, prompt_amount, struc_
     outs, outs_audio, outs_backup, input_length = _do_predictions(
         [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
-    tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(custom_model), str(base_model), str(topk), str(topp), str(temperature), str(cfg_coef)]
+    tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(custom_model), str(base_model), str(decoder), str(topk), str(topp), str(temperature), str(cfg_coef)]
     wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags);
     # Removes the temporary files.
     for out in outs:
@@ -791,13 +796,6 @@ def toggle_audio_src(choice):
         return gr.update(source="microphone", value=None, label="Microphone")
     else:
         return gr.update(source="upload", value=None, label="File")
-
-
-def toggle_diffusion(choice):
-    if choice == "MultiBand_Diffusion":
-        return [gr.update(visible=True)] * 2
-    else:
-        return [gr.update(visible=False)] * 2
 
 
 def ui_full(launch_kwargs):
@@ -1249,11 +1247,11 @@ def ui_full(launch_kwargs):
                 with gr.Column():
                     info = gr.Textbox(label="Audio Info", lines=10, interactive=False)
 
-        send_gen.click(info_to_params, inputs=[in_audio], outputs=[struc_prompts, global_prompt, bpm, key, scale, model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select], queue=False)
+        send_gen.click(info_to_params, inputs=[in_audio], outputs=[decoder, struc_prompts, global_prompt, bpm, key, scale, model, dropdown, basemodel, s, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], mode, duration, topk, topp, temperature, cfg_coef, seed, overlap, channel, sr_select], queue=False)
         in_audio.change(get_audio_info, in_audio, outputs=[info])
         reuse_seed.click(fn=lambda x: x, inputs=[seed_used], outputs=[seed], queue=False)
         send_audio.click(fn=lambda x: x, inputs=[backup_only], outputs=[audio], queue=False)
-        submit.click(toggle_diffusion, decoder, [output, audio_only], queue=False, show_progress=False).then(predict_full, inputs=[model, decoder, dropdown, basemodel, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
+        submit.click(predict_full, inputs=[model, decoder, dropdown, basemodel, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
