@@ -468,6 +468,12 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         print(f'video: {video}')
     print("batch finished", len(texts), time.time() - be)
     print("Tempfiles currently stored: ", len(file_cleaner.files))
+    if MOVE_TO_CPU:
+        MODEL.to('cpu')
+    if UNLOAD_MODEL:
+        MODEL = None
+    torch.cuda.empty_cache()
+    torch.cuda.ipc_collect()
     return out_videos, out_wavs
 
 
