@@ -49,6 +49,8 @@ theme = gr.themes.Base(
 
 MODEL = None  # Last used model
 MODELS = None
+INTERRUPTED = False
+UNLOAD_MODEL = False
 MOVE_TO_CPU = False
 IS_BATCHED = "facebook/MusicGen" in os.environ.get('SPACE_ID', '')
 print(IS_BATCHED)
@@ -146,20 +148,22 @@ def load_model(version='melody'):
     version = "GrandaddyShmax/musicgen-" + version
     if MODELS is None:
         MODEL = MusicGen.get_pretrained(version)
+
+        return
     else:
         t1 = time.monotonic()
         if MODEL is not None:
             MODEL.to('cpu') # move to cache
             print("Previous model moved to CPU in %.2fs" % (time.monotonic() - t1))
             t1 = time.monotonic()
-        if MODELS.get(version) is None:
+        if version != 'custom' and MODELS.get(version) is None:
             print("Loading model %s from disk" % version)
             result = MusicGen.get_pretrained(version)
             MODELS[version] = result
             print("Model loaded in %.2fs" % (time.monotonic() - t1))
             MODEL = result
             return
-        result = MODELS[version].to('cude')
+        result = MODELS[version].to('cuda')
         print("Cached model loaded in %.2fs" % (time.monotonic() - t1))
         MODEL = result
 
