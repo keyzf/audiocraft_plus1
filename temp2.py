@@ -126,7 +126,19 @@ def make_waveform(*args, **kwargs):
     be = time.time()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        out = gr.make_waveform(*args, **kwargs)
+        height = kwargs.pop('height')
+        width = kwargs.pop('width')
+        if height < 256:
+            height = 256
+        if width < 256:
+            width = 256
+        waveform_video = gr.make_waveform(*args, **kwargs)
+        out = f"{generate_random_string(12)}.mp4"
+        image = kwargs.get('bg_image', None)
+        if image is None:
+            resize_video(waveform_video, out, 900, 300)
+        else:
+            resize_video(waveform_video, out, width, height)
         print("Make a video took", time.time() - be)
         return out
 
