@@ -396,6 +396,7 @@ def _do_predictions(texts, melodies, sample, trim_start, trim_end, duration, ima
         if sample_length >= duration:
             duration = sample_length + 0.5
         input_length = sample_length
+    global MODEL
     MODEL.set_generation_params(duration=(duration - cut_size), **gen_kwargs)
     print("new batch", len(texts), texts, [None if m is None else (m[0], m[1].shape) for m in melodies], [None if sample is None else (sample[0], sample[1].shape)])
     be = time.time()
