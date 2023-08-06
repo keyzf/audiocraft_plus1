@@ -447,7 +447,7 @@ def unload_diffusion():
         MBD = None
 
 
-def _do_predictions(texts, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
+def _do_predictions(gen_type, texts, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     MODEL.set_generation_params(duration=duration, **gen_kwargs)
     be = time.time()
     target_sr = 32000
@@ -469,13 +469,13 @@ def _do_predictions(texts, duration, image, height, width, background, bar1, bar
     for output in outputs:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
             audio_write(
-                file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
+                file.name, output, (MODEL.sample_rate if (channel == "stereo effect" or gen_type == "audio") else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
 
             if channel == "stereo effect":
                 make_pseudo_stereo(file.name, sr_select, pan=True, delay=True);
 
-            pending_videos.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
+            pending_videos.append(pool.submit(make_waveform, file.namebg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             out_wavs.append(file.name)
             file_cleaner.add(file.name)
     for backup in backups:
@@ -668,7 +668,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
+def predict_full(gen_type, model, decoder, text, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -699,7 +699,7 @@ def predict_full(model, decoder, text, duration, topk, topp, temperature, cfg_co
     MODEL.set_custom_progress_callback(_progress)
 
     videos, wavs, outs_backup = _do_predictions(
-        [text], duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
+        gen_type, [text], duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
 
     return videos[0], wavs[0], outs_backup[0], [videos[0], wavs[0], outs_backup[0]], seed
@@ -1394,7 +1394,7 @@ def ui_full(launch_kwargs):
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
         reuse_seed_a.click(fn=lambda x: x, inputs=[seed_used_a], outputs=[seed_a], queue=False)
-        submit_a.click(predict_full, inputs=[model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
+        submit_a.click(predict_full, inputs=[gen_type_a, model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
