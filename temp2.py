@@ -451,17 +451,118 @@ def unload_diffusion():
         MBD = None
 
 
-def _do_predictions(gen_type, texts, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
+def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
+    maximum_size = 29.5
+    cut_size = 0
+    input_length = 0
+    sampleP = None
+    if sample is not None:
+        globalSR, sampleM = sample[0], sample[1]
+        sampleM = normalize_audio(sampleM)
+        sampleM = torch.from_numpy(sampleM).t()
+        if sampleM.dim() == 1:
+            sampleM = sampleM.unsqueeze(0)
+        sample_length = sampleM.shape[sampleM.dim() - 1] / globalSR
+        if trim_start >= sample_length:
+            trim_start = sample_length - 0.5
+        if trim_end >= sample_length:
+            trim_end = sample_length - 0.5
+        if trim_start + trim_end >= sample_length:
+            tmp = sample_length - 0.5
+            trim_start = tmp / 2
+            trim_end = tmp / 2
+        sampleM = sampleM[..., int(globalSR * trim_start):int(globalSR * (sample_length - trim_end))]
+        sample_length = sample_length - (trim_start + trim_end)
+        if sample_length > maximum_size:
+            cut_size = sample_length - maximum_size
+            sampleP = sampleM[..., :int(globalSR * cut_size)]
+            sampleM = sampleM[..., int(globalSR * cut_size):]
+        if sample_length >= duration:
+            duration = sample_length + 0.5
+        input_length = sample_length
     MODEL.set_generation_params(duration=duration, **gen_kwargs)
+    print("new batch", len(texts), texts, [None if m is None else (m[0], m[1].shape) for m in melodies], [None if sample is None else (sample[0], sample[1].shape)])
     be = time.time()
+    processed_melodies = []
     if gen_type == "music":
         target_sr = 32000
     elif gen_type == "audio":
         target_sr = 16000
     target_ac = 1
 
-    outputs = MODEL.generate(texts, progress=progress)
+    for melody in melodies:
+        if melody is None:
+            processed_melodies.append(None)
+        else:
+            sr, melody = melody[0], torch.from_numpy(melody[1]).to(MODEL.device).float().t()
+            if melody.dim() == 1:
+                melody = melody[None]
+            melody = melody[..., :int(sr * duration)]
+            melody = convert_audio(melody, sr, target_sr, target_ac)
+            processed_melodies.append(melody)
+
+    if sample is not None:
+        if sampleP is None:
+            if gen_type == "music":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress,
+                    return_tokens=USE_DIFFUSION
+                )
+            elif gen_type == "audio":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress
+                )
+        else:
+            if sampleP.dim() > 1:
+                sampleP = convert_audio(sampleP, globalSR, target_sr, target_ac)
+            sampleP = sampleP.to(MODEL.device).float().unsqueeze(0)
+            if gen_type == "music":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress,
+                    return_tokens=USE_DIFFUSION
+                )
+            elif gen_type == "audio":
+                outputs = MODEL.generate_continuation(
+                    prompt=sampleM,
+                    prompt_sample_rate=globalSR,
+                    descriptions=texts,
+                    progress=progress
+                )
+            outputs = torch.cat([sampleP, outputs], 2)
+            
+    elif any(m is not None for m in processed_melodies):
+        if gen_type == "music":
+            outputs = MODEL.generate_with_chroma(
+                descriptions=texts,
+                melody_wavs=processed_melodies,
+                melody_sample_rate=target_sr,
+                progress=progress,
+                return_tokens=USE_DIFFUSION
+            )
+        elif gen_type == "audio":
+            outputs = MODEL.generate_with_chroma(
+                descriptions=texts,
+                melody_wavs=processed_melodies,
+                melody_sample_rate=target_sr,
+                progress=progress
+            )
+    else:
+        if gen_type == "music":
+            outputs = MODEL.generate(texts, progress=progress, return_tokens=USE_DIFFUSION)
+        elif gen_type == "audio":
+            outputs = MODEL.generate(texts, progress=progress)
+
     if USE_DIFFUSION:
+        print("outputs: " + str(outputs))
         outputs_diffusion = MBD.tokens_to_wav(outputs[1])
         outputs = torch.cat([outputs[0], outputs_diffusion], dim=0)
     outputs = outputs.detach().cpu().float()
@@ -675,7 +776,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(gen_type, model, decoder, text, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
+def predict_full(gen_type, model, decoder, text, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -687,7 +788,13 @@ def predict_full(gen_type, model, decoder, text, duration, topk, topp, temperatu
     if topp < 0:
         raise gr.Error("Topp must be non-negative.")
 
+    if trim_start < 0:
+        trim_start = 0
+    if trim_end < 0:
+        trim_end = 0
+
     topk = int(topk)
+
     if decoder == "MultiBand_Diffusion":
         USE_DIFFUSION = True
         load_diffusion()
@@ -712,8 +819,18 @@ def predict_full(gen_type, model, decoder, text, duration, topk, topp, temperatu
             raise gr.Error("Interrupted.")
     MODEL.set_custom_progress_callback(_progress)
 
+    audio_mode = "none"
+    melody = None
+    sample = None
+    if audio:
+      audio_mode = mode
+      if mode == "sample":
+          sample = audio
+      elif mode == "melody":
+          melody = audio
+
     videos, wavs, outs_backup = _do_predictions(
-        gen_type, [text], duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
+        gen_type, [text], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
 
     return videos[0], wavs[0], outs_backup[0], [videos[0], wavs[0], outs_backup[0]], seed
@@ -1030,6 +1147,16 @@ def ui_full(launch_kwargs):
                             gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
                             reuse_seed_a = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
 
+                    with gr.Tab("Audio"):
+                        with gr.Row():
+                            with gr.Column():
+                                input_type_a = gr.Radio(["file", "mic"], value="file", label="Input Type (optional)", interactive=True)
+                                mode_a = gr.Radio(["sample"], label="Input Audio Mode (optional)", value="sample", interactive=False, visible=False)
+                                with gr.Row():
+                                    trim_start_a = gr.Number(label="Trim Start", value=0, interactive=True)
+                                    trim_end_a = gr.Number(label="Trim End", value=0, interactive=True)
+                            audio_a = gr.Audio(source="upload", type="numpy", label="Input Audio (optional)", interactive=True)
+
                     with gr.Tab("Customization"):
                         with gr.Row():
                             with gr.Column():
@@ -1063,7 +1190,7 @@ def ui_full(launch_kwargs):
                         with gr.Row():
                             audio_only_a = gr.Audio(type="numpy", label="Audio Only", interactive=False)
                             backup_only_a = gr.Audio(type="numpy", label="Backup Audio", interactive=False, visible=False)
-                            #send_audio_a = gr.Button("Send to Input Audio")
+                            send_audio_a = gr.Button("Send to Input Audio")
                         seed_used_a = gr.Number(label='Seed used', value=-1, interactive=False)
                         download_a = gr.File(label="Generated Files", interactive=False)
                     with gr.Tab("Wiki"):
@@ -1408,7 +1535,9 @@ def ui_full(launch_kwargs):
         to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
         reuse_seed_a.click(fn=lambda x: x, inputs=[seed_used_a], outputs=[seed_a], queue=False)
-        submit_a.click(predict_full, inputs=[gen_type_a, model_a, decoder_a, text_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
+        send_audio_a.click(fn=lambda x: x, inputs=[backup_only_a], outputs=[audio_a], queue=False)
+        submit_a.click(predict_full, inputs=[gen_type_a, model_a, decoder_a, text_a, audio_a, mode_a, trim_start_a, trim_end_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
+        input_type_a.change(toggle_audio_src, input_type_a, [audio_a], queue=False, show_progress=False)
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
