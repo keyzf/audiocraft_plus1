@@ -144,9 +144,9 @@ def make_waveform(*args, **kwargs):
 
 
 def load_model(version='GrandaddyShmax/musicgen-melody', custom_model=None, base_model='GrandaddyShmax/musicgen-medium', gen_type="music"):
-    global MODEL
+    global MODEL, MODELS
     print("Loading model", version)
-    if MODEL is None or MODEL.name != version:
+    if MODELS is None:
         if version == 'GrandaddyShmax/musicgen-custom':
             MODEL = MusicGen.get_pretrained(base_model)
             file_path = os.path.abspath("models/" + str(custom_model) + ".pt")
@@ -158,6 +158,26 @@ def load_model(version='GrandaddyShmax/musicgen-melody', custom_model=None, base
                 MODEL = AudioGen.get_pretrained(version)
 
         return
+
+    else:
+        t1 = time.monotonic()
+        if MODEL is not None:
+            MODEL.to('cpu') # move to cache
+            print("Previous model moved to CPU in %.2fs" % (time.monotonic() - t1))
+            t1 = time.monotonic()
+        if version != 'GrandaddyShmax/musicgen-custom' and MODELS.get(version) is None:
+            print("Loading model %s from disk" % version)
+            if gen_type == "music":
+                result = MusicGen.get_pretrained(version)
+            elif gen_type == "audio":
+                result = AudioGen.get_pretrained(version)
+            MODELS[version] = result
+            print("Model loaded in %.2fs" % (time.monotonic() - t1))
+            MODEL = result
+            return
+        result = MODELS[version].to('cuda')
+        print("Cached model loaded in %.2fs" % (time.monotonic() - t1))
+        MODEL = result
 
 def get_audio_info(audio_path):
     if audio_path is not None:
@@ -489,6 +509,7 @@ def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, dur
         if sample_length >= duration:
             duration = sample_length + 0.5
         input_length = sample_length
+    global MODEL
     MODEL.set_generation_params(duration=(duration - cut_size), **gen_kwargs)
     print("new batch", len(texts), texts, [None if m is None else (m[0], m[1].shape) for m in melodies], [None if sample is None else (sample[0], sample[1].shape)])
     be = time.time()
@@ -611,6 +632,12 @@ def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, dur
         print(f'video: {file}')
     print("batch finished", len(texts), time.time() - be)
     print("Tempfiles currently stored: ", len(file_cleaner.files))
+    if MOVE_TO_CPU:
+        MODEL.to('cpu')
+    if UNLOAD_MODEL:
+        MODEL = None
+    torch.cuda.empty_cache()
+    torch.cuda.ipc_collect()
     return res, res_audio, res_backup, input_length
 
 
@@ -824,12 +851,19 @@ def predict_full(gen_type, model, decoder, custom_model, base_model, prompt_amou
         unload_diffusion()
 
     if gen_type == "music":
+        model_shrt = model
         model = "GrandaddyShmax/musicgen-" + model
     elif gen_type == "audio":
+        model_shrt = model
         model = "GrandaddyShmax/audiogen-" + model
+    base_model_shrt = base_model
     base_model = "GrandaddyShmax/musicgen-" + base_model
 
-    load_model(model, custom_model, base_model, gen_type)
+    if MODEL is None or MODEL.name != (model):
+        load_model(model, custom_model, base_model, gen_type)
+    else:
+        if MOVE_TO_CPU:
+            MODEL.to('cuda')
 
     if seed < 0:
         seed = random.randint(0, 0xffff_ffff_ffff)
@@ -887,7 +921,7 @@ def predict_full(gen_type, model, decoder, custom_model, base_model, prompt_amou
     outs, outs_audio, outs_backup, input_length = _do_predictions(
         gen_type, [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
-    tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(custom_model), str(base_model), str(decoder), str(topk), str(topp), str(temperature), str(cfg_coef), str(gen_type)]
+    tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model_shrt), str(custom_model), str(base_model_shrt), str(decoder), str(topk), str(topp), str(temperature), str(cfg_coef), str(gen_type)]
     wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags);
     # Removes the temporary files.
     for out in outs:
@@ -972,8 +1006,8 @@ def ui_full(launch_kwargs):
                             overlap = gr.Slider(minimum=1, maximum=29, value=12, step=1, label="Overlap", interactive=True)
                         with gr.Row():
                             seed = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
-                            gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed], queue=False)
-                            reuse_seed = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
+                            gr.Button('\U0001f3b2\ufe0f', scale=1).click(fn=lambda: -1, outputs=[seed], queue=False)
+                            reuse_seed = gr.Button('\u267b\ufe0f', scale=1)
 
                     with gr.Tab("Audio"):
                         with gr.Row():
@@ -1232,8 +1266,8 @@ def ui_full(launch_kwargs):
                             overlap_a = gr.Slider(minimum=1, maximum=9, value=2, step=1, label="Overlap", interactive=True)
                         with gr.Row():
                             seed_a = gr.Number(label="Seed", value=-1, scale=4, precision=0, interactive=True)
-                            gr.Button('\U0001f3b2\ufe0f', scale=1).style(full_width=False).click(fn=lambda: -1, outputs=[seed_a], queue=False)
-                            reuse_seed_a = gr.Button('\u267b\ufe0f', scale=1).style(full_width=False)
+                            gr.Button('\U0001f3b2\ufe0f', scale=1).click(fn=lambda: -1, outputs=[seed_a], queue=False)
+                            reuse_seed_a = gr.Button('\u267b\ufe0f', scale=1)
 
                     with gr.Tab("Audio"):
                         with gr.Row():
@@ -1420,7 +1454,7 @@ def ui_full(launch_kwargs):
             )
             with gr.Row():
                 with gr.Column():
-                    in_audio = gr.File(source="upload", type="file", label="Input Any Audio", interactive=True)
+                    in_audio = gr.File(type="file", label="Input Any Audio", interactive=True)
                     with gr.Row():
                         send_gen = gr.Button("Send to MusicGen", variant="primary")
                         send_gen_a = gr.Button("Send to AudioGen", variant="primary")
