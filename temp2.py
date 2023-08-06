@@ -483,7 +483,7 @@ def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, dur
         if sample_length >= duration:
             duration = sample_length + 0.5
         input_length = sample_length
-    MODEL.set_generation_params(duration=duration, **gen_kwargs)
+    MODEL.set_generation_params(duration=(duration - cut_size), **gen_kwargs)
     print("new batch", len(texts), texts, [None if m is None else (m[0], m[1].shape) for m in melodies], [None if sample is None else (sample[0], sample[1].shape)])
     be = time.time()
     processed_melodies = []
@@ -745,7 +745,7 @@ def s2t(seconds, seconds2):
     return ("%02d:%02d - %02d:%02d" % (m, s, m2, s2))
 
 
-def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
+def calc_time(gen_type, s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     # calculate the time of generation
     # overlap - overlap in seconds
     # d0-d9 - drag
@@ -756,8 +756,13 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     time = 0
     s = s - 1
     max_time = duration
-    track_add = 30 - overlap
-    tracks.append(30 + ((d_amount[0] - 1) * track_add))
+    max_limit = 0
+    if gen_type == "music":
+        max_limit = 30
+    elif gen_type == "audio":
+        max_limit = 10
+    track_add = max_limit - overlap
+    tracks.append(max_limit + ((d_amount[0] - 1) * track_add))
     for i in range(1, 10):
         tracks.append(d_amount[i] * track_add)
     
@@ -779,7 +784,7 @@ def calc_time(s, duration, overlap, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9):
     return calc[0], calc[1], calc[2], calc[3], calc[4], calc[5], calc[6], calc[7], calc[8], calc[9]
 
 
-def predict_full(gen_type, model, decoder, text, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
+def predict_full(gen_type, model, decoder, text, prompt_amount, struc_prompt, bpm, key, scale, global_prompt, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select, progress=gr.Progress()):
     global INTERRUPTING
     global USE_DIFFUSION
     INTERRUPTING = False
@@ -832,8 +837,38 @@ def predict_full(gen_type, model, decoder, text, audio, mode, trim_start, trim_e
       elif mode == "melody":
           melody = audio
 
+    text_cat = [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9]
+    drag_cat = [d0, d1, d2, d3, d4, d5, d6, d7, d8, d9]
+    texts = []
+    raw_texts = []
+    ind = 0
+    ind2 = 0
+    while ind < prompt_amount:
+        for ind2 in range(int(drag_cat[ind])):
+            if not struc_prompt:
+                texts.append(text_cat[ind])
+                global_prompt = "none"
+                bpm = "none"
+                key = "none"
+                scale = "none"
+                raw_texts.append(text_cat[ind])
+            else:
+                if gen_type == "music":
+                    bpm_str = str(bpm) + " bpm"
+                    key_str = ", " + str(key) + " " + str(scale)
+                    global_str = (", " + str(global_prompt)) if str(global_prompt) != "" else ""
+                elif gen_type == "audio":
+                    bpm_str = ""
+                    key_str = ""
+                    global_str = (str(global_prompt)) if str(global_prompt) != "" else ""
+                texts_str = (", " + str(text_cat[ind])) if str(text_cat[ind]) != "" else ""
+                texts.append(bpm_str + key_str + global_str + texts_str)
+                raw_texts.append(text_cat[ind])
+        ind2 = 0
+        ind = ind + 1
+
     videos, wavs, outs_backup = _do_predictions(
-        gen_type, [text], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
+        gen_type, [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
 
     return videos[0], wavs[0], outs_backup[0], [videos[0], wavs[0], outs_backup[0]], seed
@@ -1139,8 +1174,34 @@ def ui_full(launch_kwargs):
             with gr.Row():
                 with gr.Column():
                     with gr.Tab("Generation"):
+                        with gr.Accordion("Structure Prompts", open=False):
+                            with gr.Row():
+                                struc_prompts_a = gr.Checkbox(label="Enable", value=False, interactive=True, container=False)
+                                global_prompt_a = gr.Text(label="Global Prompt", interactive=True, scale=3)
                         with gr.Row():
-                            text_a = gr.Text(label="Input Text", interactive=True)
+                            s_a = gr.Slider(1, max_textboxes, value=1, step=1, label="Prompts:", interactive=True, scale=2)
+                        with gr.Column():
+                            textboxes_a = []
+                            prompts_a = []
+                            repeats_a = []
+                            calcs_a = []
+                            with gr.Row():
+                                text0_a = gr.Text(label="Input Text", interactive=True, scale=4)
+                                prompts_a.append(text0_a)
+                                drag0_a = gr.Number(label="Repeat", value=1, interactive=True, scale=1)
+                                repeats_a.append(drag0_a)
+                                calc0_a = gr.Text(interactive=False, value="00:00 - 00:00", scale=1, label="Time")
+                                calcs_a.append(calc0_a)
+                            for i in range(max_textboxes):
+                                with gr.Row(visible=False) as t_a:
+                                    text_a = gr.Text(label="Input Text", interactive=True, scale=3)
+                                    repeat_a = gr.Number(label="Repeat", minimum=1, value=1, interactive=True, scale=1)
+                                    calc_a = gr.Text(interactive=False, value="00:00 - 00:00", scale=1, label="Time")
+                                textboxes_a.append(t_a)
+                                prompts_a.append(text_a)
+                                repeats_a.append(repeat_a)
+                                calcs_a.append(calc_a)
+                            to_calc_a = gr.Button("Calculate Timings", variant="secondary")
                         with gr.Row():
                             duration_a = gr.Slider(minimum=1, maximum=300, value=10, step=1, label="Duration", interactive=True)
                         with gr.Row():
@@ -1535,12 +1596,13 @@ def ui_full(launch_kwargs):
         send_audio.click(fn=lambda x: x, inputs=[backup_only], outputs=[audio], queue=False)
         submit.click(predict_full, inputs=[gen_type, model, decoder, dropdown, basemodel, s, struc_prompts, bpm, key, scale, global_prompt, prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5], prompts[6], prompts[7], prompts[8], prompts[9], repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9], audio, mode, trim_start, trim_end, duration, topk, topp, temperature, cfg_coef, seed, overlap, image, height, width, background, bar1, bar2, channel, sr_select], outputs=[output, audio_only, backup_only, download, seed_used])
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
-        to_calc.click(calc_time, inputs=[s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
+        to_calc.click(calc_time, inputs=[gen_type, s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
         reuse_seed_a.click(fn=lambda x: x, inputs=[seed_used_a], outputs=[seed_a], queue=False)
         send_audio_a.click(fn=lambda x: x, inputs=[backup_only_a], outputs=[audio_a], queue=False)
-        submit_a.click(predict_full, inputs=[gen_type_a, model_a, decoder_a, text_a, audio_a, mode_a, trim_start_a, trim_end_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
+        submit_a.click(predict_full, inputs=[gen_type_a, model_a, decoder_a, text_a, s_a, struc_prompts_a, bpm, key, scale, global_prompt_a, prompts_a[0], prompts_a[1], prompts_a[2], prompts_a[3], prompts_a[4], prompts_a[5], prompts_a[6], prompts_a[7], prompts_a[8], prompts_a[9], repeats_a[0], repeats_a[1], repeats_a[2], repeats_a[3], repeats_a[4], repeats_a[5], repeats_a[6], repeats_a[7], repeats_a[8], repeats_a[9], audio_a, mode_a, trim_start_a, trim_end_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
         input_type_a.change(toggle_audio_src, input_type_a, [audio_a], queue=False, show_progress=False)
+        to_calc_a.click(calc_time, inputs=[gen_type_a, s_a, duration_a, overlap_a, repeats_a[0], repeats_a[1], repeats_a[2], repeats_a[3], repeats_a[4], repeats_a[5], repeats_a[6], repeats_a[7], repeats_a[8], repeats_a[9]], outputs=[calcs_a[0], calcs_a[1], calcs_a[2], calcs_a[3], calcs_a[4], calcs_a[5], calcs_a[6], calcs_a[7], calcs_a[8], calcs_a[9]], queue=False)
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
@@ -1559,6 +1621,7 @@ def ui_full(launch_kwargs):
                 return img_height, img_width
             else:
                 return 512, 768
+
         image.change(get_size, image, outputs=[height, width])
         image_a.change(get_size, image_a, outputs=[height_a, width_a])
         s.change(variable_outputs, s, textboxes)
