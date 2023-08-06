@@ -690,7 +690,7 @@ def add_tags(filename, tags):
     return json_file.name;
 
 
-def save_outputs(mp4, wav_tmp, tags):
+def save_outputs(mp4, wav_tmp, tags, gen_type):
     # mp4: .mp4 file name in root running folder of app.py    
     # wav_tmp: temporary wav file located in %TEMP% folder
     # seed - used seed 
@@ -702,9 +702,9 @@ def save_outputs(mp4, wav_tmp, tags):
     # then we store generated mp4 and wav into destination folders.     
 
     current_date = datetime.now().strftime("%Y%m%d")
-    wav_directory = os.path.join(os.getcwd(), 'output', current_date,'wav')
-    mp4_directory = os.path.join(os.getcwd(), 'output', current_date,'mp4')
-    json_directory = os.path.join(os.getcwd(), 'output', current_date,'json')
+    wav_directory = os.path.join(os.getcwd(), 'output', current_date, gen_type,'wav')
+    mp4_directory = os.path.join(os.getcwd(), 'output', current_date, gen_type,'mp4')
+    json_directory = os.path.join(os.getcwd(), 'output', current_date, gen_type,'json')
     os.makedirs(wav_directory, exist_ok=True)
     os.makedirs(mp4_directory, exist_ok=True)
     os.makedirs(json_directory, exist_ok=True)
@@ -922,7 +922,7 @@ def predict_full(gen_type, model, decoder, custom_model, base_model, prompt_amou
         gen_type, [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
     tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model_shrt), str(custom_model), str(base_model_shrt), str(decoder), str(topk), str(topp), str(temperature), str(cfg_coef), str(gen_type)]
-    wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags);
+    wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags, gen_type);
     # Removes the temporary files.
     for out in outs:
         os.remove(out)
@@ -1297,7 +1297,7 @@ def ui_full(launch_kwargs):
                             sr_select_a = gr.Dropdown(["11025", "16000", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                         with gr.Row():
                             model_a = gr.Radio(["medium"], label="Model", value="medium", interactive=False, visible=False)
-                            decoder_a = gr.Radio(["Default", "MultiBand_Diffusion"], label="Decoder", value="Default", interactive=True)
+                            decoder_a = gr.Radio(["Default"], label="Decoder", value="Default", interactive=False, visible=False)
                         with gr.Row():
                             topk_a = gr.Number(label="Top-k", value=250, interactive=True)
                             topp_a = gr.Number(label="Top-p", value=0, interactive=True)
