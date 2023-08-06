@@ -452,7 +452,10 @@ def unload_diffusion():
 
 
 def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
-    maximum_size = 29.5
+    if gen_type == "music":
+        maximum_size = 29.5
+    elif gen_type == "audio":
+        maximum_size = 9.5
     cut_size = 0
     input_length = 0
     sampleP = None
