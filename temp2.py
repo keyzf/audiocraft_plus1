@@ -1319,10 +1319,10 @@ def ui_full(launch_kwargs):
                         gr.Markdown(
                             """
                             - **[Generate (button)]:**  
-                            Generates the music with the given settings and prompts.
+                            Generates the audio with the given settings and prompts.
 
                             - **[Interrupt (button)]:**  
-                            Stops the music generation as soon as it can, providing an incomplete output.
+                            Stops the audio generation as soon as it can, providing an incomplete output.
 
                             ---
 
@@ -1341,16 +1341,16 @@ def ui_full(launch_kwargs):
 
                             #### Multi-Prompt: 
                             
-                            This feature allows you to control the music, adding variation to different time segments.  
-                            You have up to 10 prompt segments. the first prompt will always be 30s long  
-                            the other prompts will be [30s - overlap].  
-                            for example if the overlap is 10s, each prompt segment will be 20s.
+                            This feature allows you to control the audio, adding variation to different time segments.  
+                            You have up to 10 prompt segments. the first prompt will always be 10s long  
+                            the other prompts will be [10s - overlap].  
+                            for example if the overlap is 2s, each prompt segment will be 8s.
 
                             - **[Prompt Segments (number)]:**  
-                            Amount of unique prompt to generate throughout the music generation.
+                            Amount of unique prompt to generate throughout the audio generation.
 
                             - **[Prompt/Input Text (prompt)]:**  
-                            Here describe the music you wish the model to generate.
+                            Here describe the audio you wish the model to generate.
 
                             - **[Repeat (number)]:**  
                             Write how many times this prompt will repeat (instead of wasting another prompt segment on the same prompt).
@@ -1362,15 +1362,15 @@ def ui_full(launch_kwargs):
                             Calculates the timings of the prompt segments.
 
                             - **[Duration (number)]:**  
-                            How long you want the generated music to be (in seconds).
+                            How long you want the generated audio to be (in seconds).
 
                             - **[Overlap (number)]:**  
                             How much each new segment will reference the previous segment (in seconds).  
-                            For example, if you choose 20s: Each new segment after the first one will reference the previous segment 20s  
-                            and will generate only 10s of new music. The model can only process 30s of music.
+                            For example, if you choose 2s: Each new segment after the first one will reference the previous segment 2s  
+                            and will generate only 8s of new audio. The model can only process 10s of music.
 
                             - **[Seed (number)]:**  
-                            Your generated music id. If you wish to generate the exact same music,  
+                            Your generated audio id. If you wish to generate the exact same audio,  
                             place the exact seed with the exact prompts  
                             (This way you can also extend specific song that was generated short).
 
@@ -1427,11 +1427,6 @@ def ui_full(launch_kwargs):
 
                             - **[Output Audio Sample Rate (dropdown)]:**  
                             The output audio sample rate, the model default is 32000.
-
-                            - **[Decoder (selection)]:**  
-                            Choose here the decoder that you wish to use:  
-                            `Default` is the default decoder  
-                            `MultiBand_Diffusion` is a decoder that uses diffusion to generate the audio.
 
                             - **[Top-k (number)]:**  
                             is a parameter used in text generation models, including music generation models. It determines the number of most likely next tokens to consider at each step of the generation process. The model ranks all possible tokens based on their predicted probabilities, and then selects the top-k tokens from the ranked list. The model then samples from this reduced set of tokens to determine the next token in the generated sequence. A smaller value of k results in a more focused and deterministic output, while a larger value of k allows for more diversity in the generated music.
