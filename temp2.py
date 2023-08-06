@@ -1625,6 +1625,7 @@ def ui_full(launch_kwargs):
         image.change(get_size, image, outputs=[height, width])
         image_a.change(get_size, image_a, outputs=[height_a, width_a])
         s.change(variable_outputs, s, textboxes)
+        s_a.change(variable_outputs, s_a, textboxes_a)
         interface.queue().launch(**launch_kwargs)
 
 
