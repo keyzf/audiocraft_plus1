@@ -290,7 +290,7 @@ def info_to_params(audio_path):
                         text.extend([""] * (10 - len(text)))
                         repeat.extend([1] * (10 - len(repeat)))
                         unique_prompts = len([t for t in text if t])
-                    audio_mode = data['audio_mode'] if 'audio_mode' in data else "sample"
+                    audio_mode = ("sample" if data['audio_mode'] == "none" else data['audio_mode']) if 'audio_mode' in data else "sample"
                     duration = int(data['duration']) if 'duration' in data else 10
                     topk = float(data['topk']) if 'topk' in data else 250
                     topp = float(data['topp']) if 'topp' in data else 0
@@ -334,7 +334,7 @@ def info_to_params(audio_path):
                         text.extend([""] * (10 - len(text)))
                         repeat.extend([1] * (10 - len(repeat)))
                         unique_prompts = len([t for t in text if t])
-                    audio_mode = data['audio_mode'] if 'audio_mode' in data else "sample"
+                    audio_mode = ("sample" if data['audio_mode'] == "none" else data['audio_mode']) if 'audio_mode' in data else "sample"
                     duration = int(data['duration']) if 'duration' in data else 10
                     topk = float(data['topk']) if 'topk' in data else 250
                     topp = float(data['topp']) if 'topp' in data else 0
