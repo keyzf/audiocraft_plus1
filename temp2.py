@@ -450,7 +450,10 @@ def unload_diffusion():
 def _do_predictions(gen_type, texts, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=False, **gen_kwargs):
     MODEL.set_generation_params(duration=duration, **gen_kwargs)
     be = time.time()
-    target_sr = 32000
+    if gen_type == "music":
+        target_sr = 32000
+    elif gen_type == "audio":
+        target_sr == 16000
     target_ac = 1
 
     outputs = MODEL.generate(texts, progress=progress)
@@ -469,13 +472,13 @@ def _do_predictions(gen_type, texts, duration, image, height, width, background,
     for output in outputs:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
             audio_write(
-                file.name, output, (MODEL.sample_rate if (channel == "stereo effect" or gen_type == "audio") else int(sr_select)), strategy="loudness",
+                file.name, output, (MODEL.sample_rate if channel == "stereo effect" else int(sr_select)), strategy="loudness",
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
 
             if channel == "stereo effect":
                 make_pseudo_stereo(file.name, sr_select, pan=True, delay=True);
 
-            pending_videos.append(pool.submit(make_waveform, file.namebg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
+            pending_videos.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             out_wavs.append(file.name)
             file_cleaner.add(file.name)
     for backup in backups:
@@ -807,7 +810,7 @@ def ui_full(launch_kwargs):
                     with gr.Tab("Settings"):
                         with gr.Row():
                             channel = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
-                            sr_select = gr.Dropdown(["11025", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
+                            sr_select = gr.Dropdown(["11025", "16000", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                         with gr.Row():
                             model = gr.Radio(["melody", "small", "medium", "large", "custom"], label="Model", value="large", interactive=True, scale=1)
                             with gr.Column():
@@ -1031,7 +1034,7 @@ def ui_full(launch_kwargs):
                     with gr.Tab("Settings"):
                         with gr.Row():
                             channel_a = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
-                            sr_select_a = gr.Dropdown(["11025", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
+                            sr_select_a = gr.Dropdown(["11025", "16000", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                         with gr.Row():
                             model_a = gr.Radio(["facebook/audiogen-medium"], label="Model", value="facebook/audiogen-medium", interactive=False, visible=False)
                             decoder_a = gr.Radio(["Default", "MultiBand_Diffusion"], label="Decoder", value="Default", interactive=True)
