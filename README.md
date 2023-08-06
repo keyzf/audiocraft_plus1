@@ -1,4 +1,4 @@
-# AudioCraft
+# AudioCraft Plus
 ![docs badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_docs/badge.svg)
 ![linter badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_linter/badge.svg)
 ![tests badge](https://github.com/facebookresearch/audiocraft/workflows/audiocraft_tests/badge.svg)
@@ -6,6 +6,19 @@
 AudioCraft is a PyTorch library for deep learning research on audio generation. AudioCraft contains inference and training code
 for two state-of-the-art AI generative models producing high-quality audio: AudioGen and MusicGen.
 
+![image](https://github.com/GrandaddyShmax/audiocraft_plus/assets/52707645/1e74cc99-0eda-4882-9c7f-995bc4ab24aa)
+
+## Features
+AudioCraft Plus is an all-in-one WebUI for the original AudioCraft, adding many quality features on top.
+
+- AudioGen Model
+- Multiband Diffusion
+- Custom Model Support
+- Generation Metadata and Audio Info tab
+- Mono to Stereo
+- Multiprompt/Prompt Segmentation with Structure Prompts
+- Video Output Customization
+- Music Continuation
 
 ## Installation
 AudioCraft requires Python 3.9, PyTorch 2.0.0. To install AudioCraft, you can run the following:
@@ -16,7 +29,7 @@ AudioCraft requires Python 3.9, PyTorch 2.0.0. To install AudioCraft, you can ru
 pip install 'torch>=2.0'
 # Then proceed to one of the following
 pip install -U audiocraft  # stable release
-pip install -U git+https://git@github.com/facebookresearch/audiocraft#egg=audiocraft  # bleeding edge
+pip install -U git+https://git@github.com/GrandaddyShmax/audiocraft_plus#egg=audiocraft  # bleeding edge
 pip install -e .  # or if you cloned the repo locally (mandatory if you want to train).
 ```
 
