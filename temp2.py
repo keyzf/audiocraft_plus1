@@ -947,12 +947,12 @@ def toggle_audio_src(choice):
 
 
 def ui_full(launch_kwargs):
-    with gr.Blocks(title='Audiocraft Plus', theme=theme) as interface:
+    with gr.Blocks(title='AudioCraft Plus', theme=theme) as interface:
         gr.Markdown(
             """
-            # Audiocraft Plus - v2.0.0
+            # AudioCraft Plus - v2.0.0
 
-            ### An All-in-One Audiocraft WebUI
+            ### An All-in-One AudioCraft WebUI
 
             Thanks to: facebookresearch, Camenduru, rkfg, oobabooga, AlexHK and GrandaddyShmax
             """
@@ -1462,7 +1462,7 @@ def ui_full(launch_kwargs):
 
                             ### v2.0.0
 
-                            - Changed name from MusicGen+ to Audiocraft Plus
+                            - Changed name from MusicGen+ to AudioCraft Plus
                             
                             - Complete overhaul of the repo "backend" with the latest changes from the main facebookresearch repo
 
