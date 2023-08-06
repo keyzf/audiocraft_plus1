@@ -580,8 +580,8 @@ def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, dur
         outputs = convert_audio(outputs, target_sr, int(sr_select), 2)
     elif channel == "mono" and sr_select != "32000":
         outputs = convert_audio(outputs, target_sr, int(sr_select), 1)
-    pending_videos = []
-    out_wavs = []
+    out_files = []
+    out_audios = []
     out_backup = []
     for output in outputs:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
@@ -592,9 +592,10 @@ def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, dur
             if channel == "stereo effect":
                 make_pseudo_stereo(file.name, sr_select, pan=True, delay=True);
 
-            pending_videos.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
-            out_wavs.append(file.name)
+            out_files.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
+            out_audios.append(file.name)
             file_cleaner.add(file.name)
+            print(f'wav: {file.name}')
     for backup in backups:
         with NamedTemporaryFile("wb", suffix=".wav", delete=False) as file:
             audio_write(
@@ -602,13 +603,15 @@ def _do_predictions(gen_type, texts, melodies, sample, trim_start, trim_end, dur
                 loudness_headroom_db=16, loudness_compressor=True, add_suffix=False)
             out_backup.append(file.name)
             file_cleaner.add(file.name)
-    out_videos = [pending_video.result() for pending_video in pending_videos]
+    res = [out_file.result() for out_file in out_files]
+    res_audio = out_audios
     res_backup = out_backup
-    for video in out_videos:
-        file_cleaner.add(video)
+    for file in res:
+        file_cleaner.add(file)
+        print(f'video: {file}')
     print("batch finished", len(texts), time.time() - be)
     print("Tempfiles currently stored: ", len(file_cleaner.files))
-    return out_videos, out_wavs, res_backup
+    return res, res_audio, res_backup, input_length
 
 
 def predict_batched(texts, melodies):
@@ -881,11 +884,18 @@ def predict_full(gen_type, model, decoder, custom_model, base_model, prompt_amou
         ind2 = 0
         ind = ind + 1
 
-    videos, wavs, outs_backup = _do_predictions(
+    outs, outs_audio, outs_backup, input_length = _do_predictions(
         gen_type, [texts], [melody], sample, trim_start, trim_end, duration, image, height, width, background, bar1, bar2, channel, sr_select, progress=True,
         top_k=topk, top_p=topp, temperature=temperature, cfg_coef=cfg_coef, extend_stride=MODEL.max_duration-overlap)
+    tags = [str(global_prompt), str(bpm), str(key), str(scale), str(raw_texts), str(duration), str(overlap), str(seed), str(audio_mode), str(input_length), str(channel), str(sr_select), str(model), str(custom_model), str(base_model), str(decoder), str(topk), str(topp), str(temperature), str(cfg_coef), str(gen_type)]
+    wav_target, mp4_target, json_target = save_outputs(outs[0], outs_audio[0], tags);
+    # Removes the temporary files.
+    for out in outs:
+        os.remove(out)
+    for out in outs_audio:
+        os.remove(out)
 
-    return videos[0], wavs[0], outs_backup[0], [videos[0], wavs[0], outs_backup[0]], seed
+    return mp4_target, wav_target, outs_backup[0], [mp4_target, wav_target, json_target], seed
 
 
 max_textboxes = 10
@@ -1612,6 +1622,7 @@ def ui_full(launch_kwargs):
         input_type.change(toggle_audio_src, input_type, [audio], queue=False, show_progress=False)
         to_calc.click(calc_time, inputs=[gen_type, s, duration, overlap, repeats[0], repeats[1], repeats[2], repeats[3], repeats[4], repeats[5], repeats[6], repeats[7], repeats[8], repeats[9]], outputs=[calcs[0], calcs[1], calcs[2], calcs[3], calcs[4], calcs[5], calcs[6], calcs[7], calcs[8], calcs[9]], queue=False)
 
+        send_gen_a.click(info_to_params_a, inputs=[in_audio], outputs=[decoder_a, struc_prompts_a, global_prompt_a, s_a, prompts_a[0], prompts_a[1], prompts_a[2], prompts_a[3], prompts_a[4], prompts_a[5], prompts_a[6], prompts_a[7], prompts_a[8], prompts_a[9], repeats_a[0], repeats_a[1], repeats_a[2], repeats_a[3], repeats_a[4], repeats_a[5], repeats_a[6], repeats_a[7], repeats_a[8], repeats_a[9], duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, channel_a, sr_select_a], queue=False)
         reuse_seed_a.click(fn=lambda x: x, inputs=[seed_used_a], outputs=[seed_a], queue=False)
         send_audio_a.click(fn=lambda x: x, inputs=[backup_only_a], outputs=[audio_a], queue=False)
         submit_a.click(predict_full, inputs=[gen_type_a, model_a, decoder_a, dropdown, basemodel, s_a, struc_prompts_a, bpm, key, scale, global_prompt_a, prompts_a[0], prompts_a[1], prompts_a[2], prompts_a[3], prompts_a[4], prompts_a[5], prompts_a[6], prompts_a[7], prompts_a[8], prompts_a[9], repeats_a[0], repeats_a[1], repeats_a[2], repeats_a[3], repeats_a[4], repeats_a[5], repeats_a[6], repeats_a[7], repeats_a[8], repeats_a[9], audio_a, mode_a, trim_start_a, trim_end_a, duration_a, topk_a, topp_a, temperature_a, cfg_coef_a, seed_a, overlap_a, image_a, height_a, width_a, background_a, bar1_a, bar2_a, channel_a, sr_select_a], outputs=[output_a, audio_only_a, backup_only_a, download_a, seed_used_a])
