@@ -143,11 +143,14 @@ def make_waveform(*args, **kwargs):
         return out
 
 
-def load_model(version='facebook/audiogen-medium'):
+def load_model(version='melody', gen_type="music"):
     global MODEL
     print("Loading model", version)
     if MODEL is None or MODEL.name != version:
-        MODEL = AudioGen.get_pretrained(version)
+        if gen_type == "music":
+            MODEL = MusicGen.get_pretrained(version)
+        if gen_type == "audio":
+            MODEL = AudioGen.get_pretrained(version)
 
 
 def get_audio_info(audio_path):
@@ -436,8 +439,9 @@ def normalize_audio(audio_data):
 
 def load_diffusion():
     global MBD
-    print("loading MBD")
-    MBD = MultiBandDiffusion.get_mbd_musicgen()
+    if MBD is None:
+        print("loading MBD")
+        MBD = MultiBandDiffusion.get_mbd_musicgen()
 
 
 def unload_diffusion():
@@ -453,7 +457,7 @@ def _do_predictions(gen_type, texts, duration, image, height, width, background,
     if gen_type == "music":
         target_sr = 32000
     elif gen_type == "audio":
-        target_sr == 16000
+        target_sr = 16000
     target_ac = 1
 
     outputs = MODEL.generate(texts, progress=progress)
@@ -689,7 +693,14 @@ def predict_full(gen_type, model, decoder, text, duration, topk, topp, temperatu
         load_diffusion()
     else:
         USE_DIFFUSION = False
-    load_model(model)
+        unload_diffusion()
+
+    if gen_type == "music":
+        model = "GrandaddyShmax/musicgen-" + model
+    elif gen_type == "audio":
+        model = "GrandaddyShmax/audiogen-" + model
+
+    load_model(model, gen_type)
 
     if seed < 0:
         seed = random.randint(0, 0xffff_ffff_ffff)
@@ -1036,7 +1047,7 @@ def ui_full(launch_kwargs):
                             channel_a = gr.Radio(["mono", "stereo", "stereo effect"], label="Output Audio Channels", value="stereo", interactive=True, scale=1)
                             sr_select_a = gr.Dropdown(["11025", "16000", "22050", "24000", "32000", "44100", "48000"], label="Output Audio Sample Rate", value="48000", interactive=True)
                         with gr.Row():
-                            model_a = gr.Radio(["facebook/audiogen-medium"], label="Model", value="facebook/audiogen-medium", interactive=False, visible=False)
+                            model_a = gr.Radio(["medium"], label="Model", value="medium", interactive=False, visible=False)
                             decoder_a = gr.Radio(["Default", "MultiBand_Diffusion"], label="Decoder", value="Default", interactive=True)
                         with gr.Row():
                             topk_a = gr.Number(label="Top-k", value=250, interactive=True)
@@ -1417,6 +1428,7 @@ def ui_full(launch_kwargs):
             else:
                 return 512, 768
         image.change(get_size, image, outputs=[height, width])
+        image_a.change(get_size, image_a, outputs=[height_a, width_a])
         s.change(variable_outputs, s, textboxes)
         interface.queue().launch(**launch_kwargs)
 
