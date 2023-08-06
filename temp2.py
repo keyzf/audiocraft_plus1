@@ -475,7 +475,7 @@ def _do_predictions(texts, duration, image, height, width, background, bar1, bar
             if channel == "stereo effect":
                 make_pseudo_stereo(file.name, sr_select, pan=True, delay=True);
 
-            pending_videos.append(pool.submit(make_waveform, file.namebg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
+            pending_videos.append(pool.submit(make_waveform, file.name, bg_image=image, bg_color=background, bars_color=(bar1, bar2), fg_alpha=1.0, bar_count=75, height=height, width=width))
             out_wavs.append(file.name)
             file_cleaner.add(file.name)
     for backup in backups:
