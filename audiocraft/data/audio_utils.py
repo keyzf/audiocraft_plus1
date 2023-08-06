@@ -90,7 +90,8 @@ def _clip_wav(wav: torch.Tensor, log_clipping: bool = False, stem_name: tp.Optio
         clamp_prob = (wav.abs() > 1).float().mean().item()
         print(f"CLIPPING {stem_name or ''} happening with proba (a bit of clipping is okay):",
               clamp_prob, "maximum scale: ", max_scale.item(), file=sys.stderr)
-    wav.clamp_(-1, 1)
+    #wav.clamp_(-1, 1)
+    wav = wav.clone().clamp_(-1, 1)
 
 
 def normalize_audio(wav: torch.Tensor, normalize: bool = True,
