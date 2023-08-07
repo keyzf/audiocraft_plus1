@@ -41,7 +41,7 @@ conda install 'ffmpeg<5' -c  conda-forge
 ```
 
 Incredible Installation video thanks to Pogs Cafe:
-[![Untitled](https://github.com/GrandaddyShmax/audiocraft_plus/assets/52707645/8521f681-6f69-47c0-9755-3adf11829b6e)](https://www.youtube.com/watch?v=WjGk4bcbUOI)
+[![Untitled](http://img.youtube.com/vi/WjGk4bcbUOI/0.jpg)](http://www.youtube.com/watch?v=WjGk4bcbUOI "Installing MusicGen+ Locally")
 
 
 ## Models
