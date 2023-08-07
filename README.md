@@ -40,7 +40,7 @@ sudo apt-get install ffmpeg
 conda install 'ffmpeg<5' -c  conda-forge
 ```
 
-Incredible Installation video thanks to Pogs Cafe:
+Incredible Installation video thanks to Pogs Cafe:  
 [![Untitled](http://img.youtube.com/vi/WjGk4bcbUOI/0.jpg)](http://www.youtube.com/watch?v=WjGk4bcbUOI "Installing MusicGen+ Locally")
 
 
