@@ -37,6 +37,8 @@ def loadAudio():
 			exit("Path to file does not exist.")
 		else:
 			fileData, samplerate = open_audio(args.filename)
+			print("fileData: " + str(fileData))
+			print("samplerate: " + str(samplerate))
 			return fileData, samplerate
 
 
@@ -60,19 +62,36 @@ def calculateFrameData(fileData, samplerate):
 	else:												# Adds mono channel
 		channels.append(fileData)
 
-	frameData = []
-	for channel in channels:
+	print("channels: " + str(channels))
 
+	frameData = []
+	a = 0
+	for channel in channels:
+		if a == 0:
+			print("channel: " + str(channel))
 		# Slices channelData to start and end point
 		channelData = channel[int(args.start*samplerate):int(args.end*samplerate)]
+
+		if a == 0:
+			print("channelData: " + str(channelData))
 
 		# Splits data into frames
 		channelFrameData = []
 		stepSize = samplerate/args.framerate
+		print("samplerate: " + str(samplerate))
+		print("framerate: " + str(args.framerate))
+		print("stepSize: " + str(stepSize))
+		b = 0
 		for i in range(int(np.ceil(len(channelData)/stepSize))):
 			frameDataMidpoint = stepSize * i + (stepSize/2)
 			frameDataStart = int(frameDataMidpoint - (args.duration/1000/2)*samplerate)
 			frameDataEnd = int(frameDataMidpoint + (args.duration/1000/2)*samplerate)
+
+			if a == 0 and b == 0:
+				print("frameDataMidpoint: " + str(frameDataMidpoint))
+				print("duration: " + str(args.duration))
+				print("frameDataStart: " + str(frameDataStart))
+				print("frameDataEnd: " + str(frameDataEnd))
 
 			if frameDataStart < 0:						# Leftbound data
 				emptyFrame = np.zeros(int(args.duration/1000 * samplerate))
@@ -86,6 +105,9 @@ def calculateFrameData(fileData, samplerate):
 				currentFrameData = emptyFrame
 			else:										# Inbound data
 				currentFrameData = channelData[int(frameDataStart):int(frameDataEnd)]
+			
+			if a == 0 and b == 0:
+				print("currentFrameData: " + str(currentFrameData))
 
 			# Fourier Transformation (Amplitudes)
 			frameDataAmplitudes = abs(np.fft.rfft(currentFrameData))
@@ -93,10 +115,16 @@ def calculateFrameData(fileData, samplerate):
 			# Slices frameDataAmplitudes to only contain the amplitudes between startFrequency and endFrequency
 			frameDataAmplitudes = frameDataAmplitudes[int(args.frequencyStart/(samplerate/2)*len(frameDataAmplitudes)):int(args.frequencyEnd/(samplerate/2)*len(frameDataAmplitudes))]
 
+			#---
+			
 			channelFrameData.append(frameDataAmplitudes)
+			#print("channelFrameData: " + str(channelFrameData[0]))
+			b += 1
 
 		#frameData.append(channelFrameData)
 		frameData.append(channelFrameData)
+		#print("frameData: " + str(frameData[0]))
+		a += 1
 
 	return frameData
 
@@ -105,11 +133,19 @@ def calculateFrameData(fileData, samplerate):
 Creates the bins for every channels frame. A bin contains an amplitude that will later be represented as the height of a bar, point, line, etc. on the frame.
 """
 def createBins(frameData):
+	#print("frameData: " + str(len(frameData)))
 	bins = []
+	a = 0
 	for channel in frameData:
+		if a == 0:
+			print("channel: " + str(channel[0][0]))
 		channelBins = []
+		b = 0
 		for data in channel:
+			if a == 0 and b == 0:
+				print("data: " + str(data[0]))
 			frameBins = []
+			c = 0
 			for i in range(args.bins):
 				if args.xlog == 0:
 					dataStart = int(i*len(data)/args.bins)
@@ -120,9 +156,21 @@ def createBins(frameData):
 				if dataEnd == dataStart:
 					dataEnd += 1						# Ensures [dataStart:dataEnd] does not result NaN
 				frameBins.append(np.mean(data[dataStart:dataEnd]))
+				#print("frameBins: " + str(frameBins[0]))
+				if a == 0 and b == 0 and c == 0:
+					print("dataStart: " + str(dataStart))
+					print("dataEnd: " + str(dataEnd))
+					print("frameBins: " + str(frameBins))
+				c += 1
 			channelBins.append(frameBins)
 
+			#print("channelBins: " + str(channelBins[0]))
+			b += 1
+
 		bins.append(channelBins)
+
+		#print("bins: " + str(bins[0]))
+		a += 1
 	
 	return bins
 
@@ -330,7 +378,7 @@ if __name__ == '__main__':
 
 	print("Creating bins. (3/{})".format(maxSteps))
 	bins = createBins(frameData)
-	print("bins: " + str(bins))
+	#print("bins: " + str(bins))
 	if args.smoothY > 0:
 		bins = smoothBinData(bins)
 	del frameData

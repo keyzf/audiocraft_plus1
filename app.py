@@ -34,7 +34,7 @@ from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import AudioGen, MusicGen, MultiBandDiffusion
 from audiocraft.utils import ui
-from components.visualization.visualizer import load_audio, calculate_frameData, create_bins
+from components.visualization.visualizer import load_audio, calculate_frameData, create_bins, render_save_frames
 import random, string
 
 version = "2.0.0a"
@@ -186,7 +186,8 @@ def visualize_audio(audio):
     frameData = calculate_frameData(wave, sample)
     del wave, sample
     bins = create_bins(frameData)
-    print("bins: " + str(bins))
+    del frameData
+    render_save_frames(bins)
     return
 
 
