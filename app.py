@@ -34,7 +34,7 @@ from audiocraft.data.audio_utils import convert_audio
 from audiocraft.data.audio import audio_write
 from audiocraft.models import AudioGen, MusicGen, MultiBandDiffusion
 from audiocraft.utils import ui
-from components.visualization.visualizer import load_audio, calculate_frameData, create_bins, render_save_frames
+from components.visualization.visualizer import load_audio, calculate_frameData, create_bins, render_save_frames, create_video, cleanup_files
 import random, string
 
 version = "2.0.0a"
@@ -182,12 +182,24 @@ def load_model(version='GrandaddyShmax/musicgen-melody', custom_model=None, base
 
 
 def visualize_audio(audio):
+    destination = "visualization"
+    startTime = time()
+    directoryExisted = False
+    if not os.path.exists(destination):
+        os.mkdir(destination)
+    else:
+        directoryExisted = True
     wave, sample = load_audio(audio)
     frameData = calculate_frameData(wave, sample)
     del wave, sample
     bins = create_bins(frameData)
     del frameData
     render_save_frames(bins)
+    del bins
+    if create_video() != 0:
+        print("Error creating video")
+    processTime = time() - startTime
+    cleanup_files(directoryExisted)
     return
 
 
@@ -1684,7 +1696,7 @@ def ui_full(launch_kwargs):
 
         in_audio.change(get_audio_info, in_audio, outputs=[info])
 
-        vis_button.click(visualize_audio, inputs=[inp_audio], outputs=[vis], queue=False)
+        vis_button.click(visualize_audio, inputs=[vis_audio], outputs=[vis], queue=False)
 
         def variable_outputs(k):
             k = int(k) - 1

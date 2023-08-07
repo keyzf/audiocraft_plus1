@@ -315,6 +315,7 @@ def createVideo():
 	if args.start != 0:
 		arguments += ['-ss', str(args.start)]
 	arguments += ['-i', args.filename]
+	print("args.filename: " + str(args.filename))
 	if args.end != -1:
 		arguments += ['-t', str(args.end - args.start)]
 
